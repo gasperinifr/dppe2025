@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      dataset_rows: {
+        Row: {
+          created_at: string
+          dataset_id: string
+          id: string
+          row_data: Json
+        }
+        Insert: {
+          created_at?: string
+          dataset_id: string
+          id?: string
+          row_data?: Json
+        }
+        Update: {
+          created_at?: string
+          dataset_id?: string
+          id?: string
+          row_data?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dataset_rows_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      datasets: {
+        Row: {
+          columns: Json
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          columns?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          columns?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       projetos_pesquisa: {
         Row: {
           areas_conhecimento: string | null

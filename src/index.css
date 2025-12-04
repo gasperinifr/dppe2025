@@ -15,7 +15,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 15%;
 
-    --primary: 152 65% 35%;
+    --primary: 152 82% 26%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 15% 92%;
@@ -51,10 +51,17 @@
     --status-rejected: 0 72% 51%;
     --status-disabled: 220 10% 50%;
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(152 65% 35%), hsl(152 50% 45%));
-    --gradient-header: linear-gradient(135deg, hsl(220 25% 15%), hsl(220 20% 25%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 20% 98%));
+    /* Gradients - IFSC Green */
+    --gradient-primary: linear-gradient(135deg, hsl(152 82% 26%), hsl(152 70% 35%));
+    --gradient-header: linear-gradient(135deg, hsl(152 82% 22%), hsl(152 75% 30%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(150 20% 98%));
+    
+    /* Charts */
+    --chart-1: 152 82% 26%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 200 75% 45%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 0 75% 55%;
 
     /* Shadows */
     --shadow-sm: 0 1px 2px hsl(220 25% 15% / 0.05);
