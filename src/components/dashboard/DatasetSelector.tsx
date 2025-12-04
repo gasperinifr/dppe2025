@@ -34,7 +34,7 @@ export function DatasetSelector({
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 shadow-sm min-w-[320px]">
+    <div className="bg-card rounded-xl border border-border p-4 shadow-sm w-full">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-foreground flex items-center gap-2">
           <Database className="w-4 h-4" />

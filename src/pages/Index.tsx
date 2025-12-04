@@ -209,10 +209,10 @@ export default function Index() {
     <div className="min-h-screen bg-background">
       <Header onLogout={handleSignOut} />
 
-      <main className="w-full px-4 lg:px-6 py-8 space-y-8">
-        <div className="grid lg:grid-cols-[280px_1fr] gap-6">
-          {/* Sidebar - Dataset Selector (Sticky) */}
-          <aside className="lg:self-start lg:sticky lg:top-4">
+      <main className="w-full max-w-[1600px] mx-auto px-4 lg:px-8 py-8 space-y-8">
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Sidebar - Dataset Selector */}
+          <aside className="lg:w-[280px] lg:shrink-0">
             <DatasetSelector
               datasets={datasets}
               selectedId={selectedDatasetId}
@@ -223,7 +223,7 @@ export default function Index() {
           </aside>
 
           {/* Main Content */}
-          <div className="space-y-8">
+          <div className="flex-1 min-w-0 space-y-8">
             {!selectedDataset ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <FileSpreadsheet className="w-16 h-16 text-muted-foreground mb-4" />

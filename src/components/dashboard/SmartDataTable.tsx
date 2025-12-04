@@ -19,10 +19,6 @@ import {
   Edit2,
   Trash2,
   Eye,
-  ArrowUpAZ,
-  ArrowDownAZ,
-  ArrowUp01,
-  ArrowDown01,
 } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -36,13 +32,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface SmartDataTableProps {
   columns: ColumnAnalysis[];
@@ -53,8 +42,6 @@ interface SmartDataTableProps {
 
 interface FilterState {
   search: string;
-  sortColumn: string | null;
-  sortDirection: 'asc' | 'desc';
 }
 
 export function SmartDataTable({
@@ -66,72 +53,27 @@ export function SmartDataTable({
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<FilterState>({
     search: "",
-    sortColumn: null,
-    sortDirection: 'asc',
   });
   const pageSize = 10;
 
   const displayColumns = useMemo(() => getDisplayColumns(columns, 6), [columns]);
 
-  const filteredAndSortedRows = useMemo(() => {
-    let result = [...rows];
+  const filteredRows = useMemo(() => {
+    if (!filters.search) return rows;
+    
+    const searchLower = filters.search.toLowerCase();
+    return rows.filter((row) =>
+      Object.values(row.row_data).some((value) =>
+        String(value || "").toLowerCase().includes(searchLower)
+      )
+    );
+  }, [rows, filters.search]);
 
-    // Text search
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result.filter((row) =>
-        Object.values(row.row_data).some((value) =>
-          String(value || "").toLowerCase().includes(searchLower)
-        )
-      );
-    }
-
-    // Sorting
-    if (filters.sortColumn) {
-      result.sort((a, b) => {
-        const aVal = String(a.row_data[filters.sortColumn!] || "").toLowerCase();
-        const bVal = String(b.row_data[filters.sortColumn!] || "").toLowerCase();
-        
-        // Try numeric sort first
-        const aNum = parseFloat(aVal);
-        const bNum = parseFloat(bVal);
-        
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return filters.sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
-        }
-        
-        // Fallback to string sort
-        const comparison = aVal.localeCompare(bVal, 'pt-BR');
-        return filters.sortDirection === 'asc' ? comparison : -comparison;
-      });
-    }
-
-    return result;
-  }, [rows, filters]);
-
-  const totalPages = Math.ceil(filteredAndSortedRows.length / pageSize);
-  const paginatedRows = filteredAndSortedRows.slice(
+  const totalPages = Math.ceil(filteredRows.length / pageSize);
+  const paginatedRows = filteredRows.slice(
     (page - 1) * pageSize,
     page * pageSize
   );
-
-  const clearFilters = () => {
-    setFilters({
-      search: "",
-      sortColumn: null,
-      sortDirection: 'asc',
-    });
-    setPage(1);
-  };
-
-  const handleSort = (columnName: string, direction: 'asc' | 'desc') => {
-    setFilters(prev => ({
-      ...prev,
-      sortColumn: columnName,
-      sortDirection: direction,
-    }));
-    setPage(1);
-  };
 
   const renderCellValue = (value: unknown, column: ColumnAnalysis) => {
     const strValue = String(value ?? "");
@@ -234,7 +176,7 @@ export function SmartDataTable({
 
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {/* Search and Sort Bar */}
+      {/* Search Bar */}
       <div className="p-4 border-b border-border">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
@@ -243,57 +185,28 @@ export function SmartDataTable({
               placeholder="Buscar em todos os campos..."
               value={filters.search}
               onChange={(e) => {
-                setFilters(prev => ({ ...prev, search: e.target.value }));
+                setFilters({ search: e.target.value });
                 setPage(1);
               }}
               className="pl-10"
             />
           </div>
-          
-          {/* Sort Dropdown */}
-          <Select
-            value={filters.sortColumn ? `${filters.sortColumn}_${filters.sortDirection}` : "_none"}
-            onValueChange={(value) => {
-              if (value === "_none") {
-                setFilters(prev => ({ ...prev, sortColumn: null }));
-              } else {
-                const [col, dir] = value.split(/_(?=[^_]+$)/);
-                handleSort(col, dir as 'asc' | 'desc');
-              }
-            }}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Ordenar por..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_none">Sem ordenação</SelectItem>
-              {displayColumns.map(col => (
-                <>
-                  <SelectItem key={`${col.name}_asc`} value={`${col.name}_asc`}>
-                    <div className="flex items-center gap-2">
-                      <ArrowUpAZ className="w-4 h-4" />
-                      {col.displayName} (A-Z)
-                    </div>
-                  </SelectItem>
-                  <SelectItem key={`${col.name}_desc`} value={`${col.name}_desc`}>
-                    <div className="flex items-center gap-2">
-                      <ArrowDownAZ className="w-4 h-4" />
-                      {col.displayName} (Z-A)
-                    </div>
-                  </SelectItem>
-                </>
-              ))}
-            </SelectContent>
-          </Select>
 
-          {(filters.search || filters.sortColumn) && (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
+          {filters.search && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => {
+                setFilters({ search: "" });
+                setPage(1);
+              }}
+            >
               Limpar
             </Button>
           )}
           
           <Badge variant="outline" className="whitespace-nowrap">
-            {filteredAndSortedRows.length} registros
+            {filteredRows.length} registros
           </Badge>
         </div>
       </div>
