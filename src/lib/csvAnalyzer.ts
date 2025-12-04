@@ -29,7 +29,7 @@ export interface CSVAnalysisResult {
 }
 
 export interface ChartSuggestion {
-  type: 'pie' | 'bar' | 'horizontal-bar' | 'line' | 'area' | 'radial' | 'treemap';
+  type: 'pie' | 'bar' | 'horizontal-bar' | 'line' | 'area';
   column: string;
   title: string;
   priority: number;

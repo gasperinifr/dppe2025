@@ -229,7 +229,7 @@ export function ImportDatasetDialog({
                         {chart.type === 'bar' && '📈'}
                         {chart.type === 'horizontal-bar' && '📊'}
                         {chart.type === 'area' && '📉'}
-                        {chart.type === 'radial' && '🎯'}
+                        {chart.type === 'line' && '📈'}
                         {' '}{chart.title}
                       </Badge>
                     ))}
