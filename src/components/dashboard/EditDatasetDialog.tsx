@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Dataset } from "@/types/dataset";
-import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
+import { Dataset, ChartConfig } from "@/types/dataset";
+import { ColumnAnalysis } from "@/lib/csvAnalyzer";
 import {
   Dialog,
   DialogContent,
@@ -22,15 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Save, Loader2, BarChart3, PieChart, TrendingUp } from "lucide-react";
+import { Settings, Save, Loader2, BarChart3, PieChart, TrendingUp, LineChart, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
-interface ChartConfig {
-  column: string;
-  type: 'pie' | 'bar' | 'horizontal-bar' | 'area' | 'auto';
-  enabled: boolean;
-  title: string;
-}
 
 interface EditDatasetDialogProps {
   open: boolean;
@@ -52,6 +45,7 @@ const CHART_TYPES = [
   { value: 'bar', label: 'Barras Vertical', icon: BarChart3 },
   { value: 'horizontal-bar', label: 'Barras Horizontal', icon: BarChart3 },
   { value: 'area', label: 'Área', icon: TrendingUp },
+  { value: 'line', label: 'Linha', icon: LineChart },
 ];
 
 export function EditDatasetDialog({
@@ -67,6 +61,9 @@ export function EditDatasetDialog({
   const [editedColumns, setEditedColumns] = useState<ColumnAnalysis[]>([]);
   const [chartConfigs, setChartConfigs] = useState<ChartConfig[]>([]);
 
+  // Get categorical columns for charts
+  const categoricalColumns = columns.filter(c => c.isCategorical && c.uniqueValues >= 2);
+
   // Reset state when dialog opens or dataset changes
   useEffect(() => {
     if (open && dataset) {
@@ -74,15 +71,19 @@ export function EditDatasetDialog({
       setDescription(dataset.description || "");
       setEditedColumns(columns.length > 0 ? [...columns] : []);
       
-      // Initialize chart configs from categorical columns
-      const categoricalCols = columns.filter(c => c.isCategorical && c.uniqueValues >= 2);
-      const initialConfigs: ChartConfig[] = categoricalCols.slice(0, 6).map(col => ({
-        column: col.name,
-        type: 'auto',
-        enabled: true,
-        title: `Distribuição por ${col.displayName}`,
-      }));
-      setChartConfigs(initialConfigs);
+      // Use saved chartConfigs or initialize from columns
+      if (dataset.chartConfigs && dataset.chartConfigs.length > 0) {
+        setChartConfigs([...dataset.chartConfigs]);
+      } else {
+        // Initialize with first 2 charts enabled by default
+        const initialConfigs: ChartConfig[] = categoricalColumns.map((col, idx) => ({
+          column: col.name,
+          type: 'auto' as const,
+          enabled: idx < 2, // Only first 2 enabled by default
+          title: `Distribuição por ${col.displayName}`,
+        }));
+        setChartConfigs(initialConfigs);
+      }
     }
   }, [open, dataset, columns]);
 
@@ -95,14 +96,38 @@ export function EditDatasetDialog({
   };
 
   const handleChartConfigChange = (
-    index: number, 
+    columnName: string, 
     field: keyof ChartConfig, 
     value: string | boolean
   ) => {
     setChartConfigs(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+      const existingIndex = prev.findIndex(c => c.column === columnName);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], [field]: value };
+        return updated;
+      }
+      return prev;
+    });
+  };
+
+  const handleAddChart = (columnName: string) => {
+    const col = categoricalColumns.find(c => c.name === columnName);
+    if (!col) return;
+    
+    setChartConfigs(prev => {
+      const existing = prev.find(c => c.column === columnName);
+      if (existing) {
+        // Enable existing
+        return prev.map(c => c.column === columnName ? { ...c, enabled: true } : c);
+      }
+      // Add new
+      return [...prev, {
+        column: columnName,
+        type: 'auto' as const,
+        enabled: true,
+        title: `Distribuição por ${col.displayName}`,
+      }];
     });
   };
 
@@ -117,7 +142,12 @@ export function EditDatasetDialog({
 
   if (!dataset) return null;
 
-  const categoricalColumns = columns.filter(c => c.isCategorical && c.uniqueValues >= 2);
+  // Get columns not yet added as charts
+  const availableColumnsForChart = categoricalColumns.filter(
+    col => !chartConfigs.find(c => c.column === col.name && c.enabled)
+  );
+
+  const enabledChartCount = chartConfigs.filter(c => c.enabled).length;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -164,12 +194,11 @@ export function EditDatasetDialog({
                   Configuração de Gráficos
                 </Label>
                 <Badge variant="secondary">
-                  {chartConfigs.filter(c => c.enabled).length} ativos
+                  {enabledChartCount} ativos
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Escolha quais gráficos exibir e o tipo de visualização. 
-                "Automático" seleciona o melhor tipo para cada coluna.
+                Ative ou desative gráficos e escolha o tipo de visualização.
               </p>
 
               <div className="space-y-3">
@@ -178,85 +207,107 @@ export function EditDatasetDialog({
                     Nenhuma coluna categórica encontrada para gráficos.
                   </p>
                 ) : (
-                  categoricalColumns.slice(0, 6).map((col, index) => {
-                    const config = chartConfigs[index] || {
-                      column: col.name,
-                      type: 'auto',
-                      enabled: true,
-                      title: `Distribuição por ${col.displayName}`,
-                    };
-                    
-                    return (
-                      <div
-                        key={col.name}
-                        className={`p-4 rounded-lg border transition-colors ${
-                          config.enabled 
-                            ? 'bg-card border-primary/30' 
-                            : 'bg-muted/30 border-border'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={config.enabled}
-                              onCheckedChange={(checked) =>
-                                handleChartConfigChange(index, 'enabled', checked)
-                              }
-                            />
-                            <span className="font-medium text-sm">
-                              {col.displayName}
-                            </span>
-                            <Badge variant="outline" className="text-xs">
-                              {col.uniqueValues} valores
-                            </Badge>
-                          </div>
-                        </div>
-                        
-                        {config.enabled && (
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">
-                                Tipo de Gráfico
-                              </Label>
-                              <Select
-                                value={config.type}
-                                onValueChange={(value) =>
-                                  handleChartConfigChange(index, 'type', value)
+                  <>
+                    {/* Configured charts */}
+                    {chartConfigs.map((config) => {
+                      const col = categoricalColumns.find(c => c.name === config.column);
+                      if (!col) return null;
+                      
+                      return (
+                        <div
+                          key={config.column}
+                          className={`p-4 rounded-lg border transition-colors ${
+                            config.enabled 
+                              ? 'bg-card border-primary/30' 
+                              : 'bg-muted/30 border-border'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={config.enabled}
+                                onCheckedChange={(checked) =>
+                                  handleChartConfigChange(config.column, 'enabled', checked)
                                 }
-                              >
-                                <SelectTrigger className="h-9">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {CHART_TYPES.map((type) => (
-                                    <SelectItem key={type.value} value={type.value}>
-                                      <div className="flex items-center gap-2">
-                                        <type.icon className="w-4 h-4" />
-                                        {type.label}
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">
-                                Título
-                              </Label>
-                              <Input
-                                value={config.title}
-                                onChange={(e) =>
-                                  handleChartConfigChange(index, 'title', e.target.value)
-                                }
-                                className="h-9"
-                                placeholder="Título do gráfico"
                               />
+                              <span className="font-medium text-sm">
+                                {col.displayName}
+                              </span>
+                              <Badge variant="outline" className="text-xs">
+                                {col.uniqueValues} valores
+                              </Badge>
                             </div>
                           </div>
-                        )}
+                          
+                          {config.enabled && (
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">
+                                  Tipo de Gráfico
+                                </Label>
+                                <Select
+                                  value={config.type}
+                                  onValueChange={(value) =>
+                                    handleChartConfigChange(config.column, 'type', value)
+                                  }
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {CHART_TYPES.map((type) => (
+                                      <SelectItem key={type.value} value={type.value}>
+                                        <div className="flex items-center gap-2">
+                                          <type.icon className="w-4 h-4" />
+                                          {type.label}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">
+                                  Título
+                                </Label>
+                                <Input
+                                  value={config.title}
+                                  onChange={(e) =>
+                                    handleChartConfigChange(config.column, 'title', e.target.value)
+                                  }
+                                  className="h-9"
+                                  placeholder="Título do gráfico"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Add more charts section */}
+                    {availableColumnsForChart.length > 0 && (
+                      <div className="pt-2">
+                        <Label className="text-sm text-muted-foreground mb-2 block">
+                          Adicionar mais gráficos
+                        </Label>
+                        <div className="flex flex-wrap gap-2">
+                          {availableColumnsForChart.map(col => (
+                            <Button
+                              key={col.name}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddChart(col.name)}
+                              className="text-xs"
+                            >
+                              <Plus className="w-3 h-3 mr-1" />
+                              {col.displayName}
+                            </Button>
+                          ))}
+                        </div>
                       </div>
-                    );
-                  })
+                    )}
+                  </>
                 )}
               </div>
             </div>

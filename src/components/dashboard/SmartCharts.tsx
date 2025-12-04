@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { DatasetRow } from "@/types/dataset";
+import { DatasetRow, ChartConfig } from "@/types/dataset";
 import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import {
   Legend,
   AreaChart,
   Area,
+  LineChart,
+  Line,
 } from "recharts";
 import {
   Tooltip as UITooltip,
@@ -38,6 +40,7 @@ interface SmartChartsProps {
   rows: DatasetRow[];
   columns: ColumnAnalysis[];
   chartSuggestions: ChartSuggestion[];
+  chartConfigs?: ChartConfig[];
   onUpdateRow?: (id: string, rowData: Record<string, unknown>) => void;
 }
 
@@ -65,7 +68,13 @@ interface ChartData {
 interface EditModalState {
   open: boolean;
   chartIndex: number;
-  category: string;
+  columnName: string;
+}
+
+interface CategoryEdit {
+  name: string;
+  value: number;
+  originalValue: number;
   rowIds: string[];
 }
 
@@ -73,39 +82,37 @@ export function SmartCharts({
   rows, 
   columns, 
   chartSuggestions,
+  chartConfigs,
   onUpdateRow 
 }: SmartChartsProps) {
   const [editModal, setEditModal] = useState<EditModalState>({
     open: false,
     chartIndex: -1,
-    category: "",
-    rowIds: [],
+    columnName: "",
   });
-  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [categoryEdits, setCategoryEdits] = useState<CategoryEdit[]>([]);
 
-  // Generate chart types based on data (excluding radial/treemap)
+  // Merge chartConfigs with suggestions
   const enhancedSuggestions = useMemo(() => {
-    const suggestions = [...chartSuggestions];
-    
-    // Find columns suitable for additional chart types
-    const categoricalCols = columns.filter(c => c.isCategorical && c.uniqueValues >= 2);
-    
-    // Add area chart for sequential categories
-    if (categoricalCols.length > 0 && suggestions.length < 4) {
-      const bestCol = categoricalCols.find(c => c.uniqueValues >= 4 && c.uniqueValues <= 15);
-      if (bestCol && !suggestions.find(s => s.column === bestCol.name && s.type === 'area')) {
-        suggestions.push({
-          type: 'area',
-          column: bestCol.name,
-          title: `Tendência - ${bestCol.displayName}`,
-          priority: bestCol.priority - 10,
-          description: `Visualização em área para ${bestCol.displayName}`,
+    if (chartConfigs && chartConfigs.length > 0) {
+      // Use saved configs, filtered by enabled
+      return chartConfigs
+        .filter(config => config.enabled)
+        .map(config => {
+          const col = columns.find(c => c.name === config.column);
+          return {
+            type: config.type === 'auto' ? 'bar' : config.type,
+            column: config.column,
+            title: config.title,
+            priority: 100,
+            description: col ? `${col.uniqueValues} valores únicos` : 'Gráfico personalizado',
+          } as ChartSuggestion;
         });
-      }
     }
     
-    return suggestions.slice(0, 5);
-  }, [chartSuggestions, columns]);
+    // Fallback to auto-generated suggestions
+    return chartSuggestions.slice(0, 5);
+  }, [chartSuggestions, chartConfigs, columns]);
 
   const chartsData = useMemo(() => {
     return enhancedSuggestions.map((suggestion) => {
@@ -143,41 +150,61 @@ export function SmartCharts({
     });
   }, [rows, enhancedSuggestions]);
 
-  const handleEditCategory = (chartIndex: number, category: string, rowIds: string[]) => {
-    // Get the column name for this chart
-    const columnName = chartsData[chartIndex].suggestion.column;
+  const handleOpenEditModal = (chartIndex: number) => {
+    const chartData = chartsData[chartIndex];
+    const columnName = chartData.suggestion.column;
     
-    // Initialize edit values with current category for all rows
-    const initialValues: Record<string, string> = {};
-    rowIds.forEach(id => {
-      initialValues[id] = category;
-    });
+    // Initialize category edits with current data
+    const edits: CategoryEdit[] = chartData.data.map(item => ({
+      name: item.fullName,
+      value: item.value,
+      originalValue: item.value,
+      rowIds: item.rowIds,
+    }));
     
-    setEditValues(initialValues);
+    setCategoryEdits(edits);
     setEditModal({
       open: true,
       chartIndex,
-      category,
-      rowIds,
+      columnName,
+    });
+  };
+
+  const handleCategoryValueChange = (index: number, newValue: number) => {
+    setCategoryEdits(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], value: Math.max(0, newValue) };
+      return updated;
     });
   };
 
   const handleSaveEdits = () => {
     if (!onUpdateRow) return;
     
-    const columnName = chartsData[editModal.chartIndex].suggestion.column;
+    const columnName = editModal.columnName;
     
-    // Update each row with its new value
-    editModal.rowIds.forEach(rowId => {
-      const row = rows.find(r => r.id === rowId);
-      if (row && editValues[rowId] !== undefined) {
-        const newRowData = { ...row.row_data, [columnName]: editValues[rowId] };
-        onUpdateRow(rowId, newRowData);
+    // For each category that changed, update rows
+    categoryEdits.forEach(category => {
+      const diff = category.value - category.originalValue;
+      
+      if (diff > 0) {
+        // Need to add more rows with this category - can't add rows, just notify
+        console.log(`Increase not supported: would need to add ${diff} rows`);
+      } else if (diff < 0) {
+        // Need to remove some rows from this category - change them to "N/A" or remove the value
+        const rowsToModify = category.rowIds.slice(0, Math.abs(diff));
+        rowsToModify.forEach(rowId => {
+          const row = rows.find(r => r.id === rowId);
+          if (row) {
+            const newRowData = { ...row.row_data, [columnName]: "" };
+            onUpdateRow(rowId, newRowData);
+          }
+        });
       }
     });
     
-    setEditModal({ open: false, chartIndex: -1, category: "", rowIds: [] });
-    setEditValues({});
+    setEditModal({ open: false, chartIndex: -1, columnName: "" });
+    setCategoryEdits([]);
   };
 
   if (chartsData.length === 0) {
@@ -201,30 +228,13 @@ export function SmartCharts({
           <p className="text-xs text-muted-foreground">
             {((data.value / rows.length) * 100).toFixed(1)}% do total
           </p>
-          {onUpdateRow && (
-            <p className="text-xs text-primary mt-1">Clique para editar</p>
-          )}
         </div>
       );
     }
     return null;
   };
 
-  const handleChartClick = (chartIndex: number, data: ChartData) => {
-    if (onUpdateRow && data.rowIds.length > 0) {
-      handleEditCategory(chartIndex, data.fullName, data.rowIds);
-    }
-  };
-
   const renderChart = (suggestion: ChartSuggestion, data: ChartData[], chartIndex: number) => {
-    const chartClickHandler = onUpdateRow 
-      ? (chartData: any) => {
-          if (chartData?.activePayload?.[0]?.payload) {
-            handleChartClick(chartIndex, chartData.activePayload[0].payload);
-          }
-        }
-      : undefined;
-
     switch (suggestion.type) {
       case 'pie':
         return (
@@ -237,8 +247,6 @@ export function SmartCharts({
               outerRadius={90}
               paddingAngle={2}
               dataKey="value"
-              onClick={(_, index) => onUpdateRow && handleChartClick(chartIndex, data[index])}
-              style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
             >
               {data.map((_, idx) => (
                 <Cell
@@ -263,8 +271,6 @@ export function SmartCharts({
             data={data}
             layout="vertical"
             margin={{ left: 10, right: 20 }}
-            onClick={chartClickHandler}
-            style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
           >
             <XAxis type="number" tick={{ fontSize: 11 }} />
             <YAxis
@@ -288,8 +294,6 @@ export function SmartCharts({
           <AreaChart 
             data={data} 
             margin={{ left: -10, right: 10 }}
-            onClick={chartClickHandler}
-            style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
           >
             <defs>
               <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -317,14 +321,38 @@ export function SmartCharts({
             />
           </AreaChart>
         );
+
+      case 'line':
+        return (
+          <LineChart 
+            data={data} 
+            margin={{ left: -10, right: 10 }}
+          >
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 10 }}
+              interval={0}
+              angle={-45}
+              textAnchor="end"
+              height={60}
+            />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke="hsl(142, 76%, 36%)"
+              strokeWidth={2}
+              dot={{ fill: "hsl(142, 76%, 36%)", strokeWidth: 2 }}
+            />
+          </LineChart>
+        );
       
       default: // bar chart
         return (
           <BarChart 
             data={data} 
             margin={{ left: -10, right: 10 }}
-            onClick={chartClickHandler}
-            style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
           >
             <XAxis
               dataKey="name"
@@ -364,17 +392,12 @@ export function SmartCharts({
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8"
-                            onClick={() => {
-                              // Open edit for the largest category
-                              if (data.length > 0) {
-                                handleEditCategory(index, data[0].fullName, data[0].rowIds);
-                              }
-                            }}
+                            onClick={() => handleOpenEditModal(index)}
                           >
                             <Edit2 className="w-4 h-4 text-muted-foreground" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Editar dados do gráfico</TooltipContent>
+                        <TooltipContent>Editar valores do gráfico</TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
                   )}
@@ -388,11 +411,6 @@ export function SmartCharts({
                         <p className="text-xs text-muted-foreground mt-1">
                           Coluna: {suggestion.column}
                         </p>
-                        {onUpdateRow && (
-                          <p className="text-xs text-primary mt-1">
-                            Clique nas barras/fatias para editar
-                          </p>
-                        )}
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -408,88 +426,74 @@ export function SmartCharts({
         ))}
       </div>
 
-      {/* Edit Modal */}
+      {/* Edit Modal - Numeric values per category */}
       <Dialog 
         open={editModal.open} 
-        onOpenChange={(open) => !open && setEditModal({ open: false, chartIndex: -1, category: "", rowIds: [] })}
+        onOpenChange={(open) => !open && setEditModal({ open: false, chartIndex: -1, columnName: "" })}
       >
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit2 className="w-5 h-5" />
-              Editar Categoria: {editModal.category}
+              Editar valores do gráfico
             </DialogTitle>
           </DialogHeader>
           
           <div className="py-4">
             <p className="text-sm text-muted-foreground mb-4">
-              Edite o valor da categoria para os {editModal.rowIds.length} registros selecionados.
-              Você pode alterar individualmente ou aplicar o mesmo valor para todos.
+              Altere os valores numéricos de cada categoria. Diminuir o valor irá remover registros dessa categoria.
             </p>
             
-            <div className="space-y-3 mb-4">
-              <Label>Aplicar a todos</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Novo valor para todos"
-                  onChange={(e) => {
-                    const newValues: Record<string, string> = {};
-                    editModal.rowIds.forEach(id => {
-                      newValues[id] = e.target.value;
-                    });
-                    setEditValues(newValues);
-                  }}
-                />
-              </div>
-            </div>
-            
-            <ScrollArea className="h-[200px] border rounded-md p-3">
-              <div className="space-y-2">
-                {editModal.rowIds.slice(0, 20).map((rowId, idx) => {
-                  const row = rows.find(r => r.id === rowId);
-                  const columnName = editModal.chartIndex >= 0 
-                    ? chartsData[editModal.chartIndex]?.suggestion?.column 
-                    : "";
-                  const identifier = row 
-                    ? (row.row_data[columns[0]?.name] || `Registro ${idx + 1}`)
-                    : `Registro ${idx + 1}`;
-                  
-                  return (
-                    <div key={rowId} className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-24 truncate">
-                        {String(identifier).slice(0, 15)}
-                      </span>
-                      <Input
-                        className="h-8 flex-1"
-                        value={editValues[rowId] || ""}
-                        onChange={(e) => setEditValues(prev => ({
-                          ...prev,
-                          [rowId]: e.target.value
-                        }))}
-                      />
+            <ScrollArea className="h-[300px] border rounded-md p-3">
+              <div className="space-y-3">
+                {categoryEdits.map((category, idx) => (
+                  <div key={category.name} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" title={category.name}>
+                        {category.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Original: {category.originalValue} registros
+                      </p>
                     </div>
-                  );
-                })}
-                {editModal.rowIds.length > 20 && (
-                  <p className="text-xs text-muted-foreground text-center py-2">
-                    ... e mais {editModal.rowIds.length - 20} registros
-                  </p>
-                )}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        className="h-9 w-24 text-center"
+                        value={category.value}
+                        onChange={(e) => handleCategoryValueChange(idx, parseInt(e.target.value) || 0)}
+                        min={0}
+                        max={category.originalValue}
+                      />
+                      <span className="text-xs text-muted-foreground w-8">
+                        {category.value !== category.originalValue && (
+                          <span className={category.value < category.originalValue ? "text-destructive" : "text-primary"}>
+                            {category.value - category.originalValue > 0 ? "+" : ""}{category.value - category.originalValue}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </ScrollArea>
+            
+            <p className="text-xs text-muted-foreground mt-3">
+              Nota: Apenas a redução de valores é suportada (remove registros da categoria).
+            </p>
           </div>
 
           <div className="flex justify-end gap-2">
             <Button 
               variant="outline" 
-              onClick={() => setEditModal({ open: false, chartIndex: -1, category: "", rowIds: [] })}
+              onClick={() => setEditModal({ open: false, chartIndex: -1, columnName: "" })}
             >
               <X className="w-4 h-4 mr-2" />
               Cancelar
             </Button>
             <Button onClick={handleSaveEdits}>
               <Save className="w-4 h-4 mr-2" />
-              Salvar Alterações
+              Salvar
             </Button>
           </div>
         </DialogContent>

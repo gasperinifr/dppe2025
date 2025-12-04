@@ -1,25 +1,39 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Dataset, DatasetRow, DatasetInsert, DatasetUpdate } from "@/types/dataset";
+import { Dataset, DatasetRow, DatasetInsert, DatasetUpdate, ChartConfig } from "@/types/dataset";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
 import { ColumnAnalysis } from "@/lib/csvAnalyzer";
 
-// Helper to convert DB columns to ColumnAnalysis
-function parseColumns(columns: Json): ColumnAnalysis[] {
+// Helper to convert DB columns to ColumnAnalysis with chartConfigs
+function parseColumnsData(columns: Json): { columns: ColumnAnalysis[]; chartConfigs?: ChartConfig[] } {
   if (Array.isArray(columns)) {
-    return columns as unknown as ColumnAnalysis[];
+    // Check if it's the new format with chartConfigs
+    const firstItem = columns[0];
+    if (firstItem && typeof firstItem === 'object' && firstItem !== null) {
+      const obj = firstItem as Record<string, unknown>;
+      if ('columns' in obj) {
+        return {
+          columns: (obj.columns as ColumnAnalysis[]) || [],
+          chartConfigs: obj.chartConfigs as ChartConfig[] | undefined,
+        };
+      }
+    }
+    // Legacy format - just columns array
+    return { columns: columns as unknown as ColumnAnalysis[] };
   }
-  return [];
+  return { columns: [] };
 }
 
 // Helper to convert DB data to Dataset
 function toDataset(data: Record<string, unknown>): Dataset {
+  const { columns, chartConfigs } = parseColumnsData(data.columns as Json);
   return {
     id: data.id as string,
     name: data.name as string,
     description: data.description as string | null,
-    columns: parseColumns(data.columns as Json),
+    columns,
+    chartConfigs,
     created_at: data.created_at as string,
     updated_at: data.updated_at as string,
   };
@@ -64,12 +78,18 @@ export function useCreateDataset() {
 
   return useMutation({
     mutationFn: async (dataset: DatasetInsert) => {
+      // Store columns and chartConfigs together
+      const columnsData = [{
+        columns: dataset.columns,
+        chartConfigs: dataset.chartConfigs,
+      }];
+      
       const { data, error } = await supabase
         .from("datasets")
         .insert({ 
           name: dataset.name, 
           description: dataset.description,
-          columns: dataset.columns as unknown as Json,
+          columns: columnsData as unknown as Json,
         })
         .select()
         .single();
@@ -96,7 +116,15 @@ export function useUpdateDataset() {
       
       if (updates.name !== undefined) updateData.name = updates.name;
       if (updates.description !== undefined) updateData.description = updates.description;
-      if (updates.columns !== undefined) updateData.columns = updates.columns as unknown as Json;
+      
+      // Store columns and chartConfigs together
+      if (updates.columns !== undefined || updates.chartConfigs !== undefined) {
+        const columnsData = [{
+          columns: updates.columns,
+          chartConfigs: updates.chartConfigs,
+        }];
+        updateData.columns = columnsData as unknown as Json;
+      }
 
       const { error } = await supabase
         .from("datasets")
