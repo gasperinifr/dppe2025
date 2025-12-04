@@ -18,9 +18,11 @@ import {
   ChevronRight,
   Edit2,
   Trash2,
-  ChevronDown,
-  ChevronUp,
   Eye,
+  Filter,
+  X,
+  Calendar,
+  Tag,
 } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -34,6 +36,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 interface SmartDataTableProps {
   columns: ColumnAnalysis[];
@@ -42,36 +54,146 @@ interface SmartDataTableProps {
   onDelete?: (id: string) => void;
 }
 
+interface FilterState {
+  search: string;
+  dateColumn: string | null;
+  dateFrom: string;
+  dateTo: string;
+  categoryColumn: string | null;
+  selectedCategories: string[];
+}
+
 export function SmartDataTable({
   columns,
   rows,
   onEdit,
   onDelete,
 }: SmartDataTableProps) {
-  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>({
+    search: "",
+    dateColumn: null,
+    dateFrom: "",
+    dateTo: "",
+    categoryColumn: null,
+    selectedCategories: [],
+  });
+  const [showFilters, setShowFilters] = useState(false);
   const pageSize = 10;
 
   const displayColumns = useMemo(() => getDisplayColumns(columns, 6), [columns]);
-  const allColumnNames = useMemo(() => columns.map(c => c.name), [columns]);
+  
+  // Get date columns and category columns for filters
+  const dateColumns = useMemo(() => 
+    columns.filter(c => c.isDate || c.type === 'date'), [columns]);
+  
+  const categoryColumns = useMemo(() => 
+    columns.filter(c => c.isCategorical && c.uniqueValues >= 2 && c.uniqueValues <= 50), 
+    [columns]
+  );
+
+  // Get unique values for selected category column
+  const categoryValues = useMemo(() => {
+    if (!filters.categoryColumn) return [];
+    const values = new Set<string>();
+    rows.forEach(row => {
+      const val = row.row_data[filters.categoryColumn!];
+      if (val) values.add(String(val));
+    });
+    return Array.from(values).sort();
+  }, [rows, filters.categoryColumn]);
 
   const filteredRows = useMemo(() => {
-    if (!search) return rows;
+    let result = rows;
 
-    const searchLower = search.toLowerCase();
-    return rows.filter((row) =>
-      Object.values(row.row_data).some((value) =>
-        String(value || "").toLowerCase().includes(searchLower)
-      )
-    );
-  }, [rows, search]);
+    // Text search
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter((row) =>
+        Object.values(row.row_data).some((value) =>
+          String(value || "").toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Date filter
+    if (filters.dateColumn && (filters.dateFrom || filters.dateTo)) {
+      result = result.filter((row) => {
+        const dateValue = row.row_data[filters.dateColumn!];
+        if (!dateValue) return false;
+        
+        const dateStr = String(dateValue);
+        // Parse date - handle various formats
+        let date: Date | null = null;
+        
+        if (dateStr.includes('/')) {
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            // DD/MM/YYYY or MM/DD/YYYY
+            const [a, b, c] = parts.map(p => parseInt(p));
+            if (a > 12) {
+              date = new Date(c, b - 1, a); // DD/MM/YYYY
+            } else {
+              date = new Date(c, a - 1, b); // MM/DD/YYYY
+            }
+          }
+        } else if (dateStr.includes('-')) {
+          date = new Date(dateStr);
+        }
+        
+        if (!date || isNaN(date.getTime())) return true; // Can't parse, include it
+        
+        if (filters.dateFrom) {
+          const from = new Date(filters.dateFrom);
+          if (date < from) return false;
+        }
+        
+        if (filters.dateTo) {
+          const to = new Date(filters.dateTo);
+          to.setHours(23, 59, 59, 999);
+          if (date > to) return false;
+        }
+        
+        return true;
+      });
+    }
+
+    // Category filter
+    if (filters.categoryColumn && filters.selectedCategories.length > 0) {
+      result = result.filter((row) => {
+        const value = String(row.row_data[filters.categoryColumn!] || "");
+        return filters.selectedCategories.includes(value);
+      });
+    }
+
+    return result;
+  }, [rows, filters]);
 
   const totalPages = Math.ceil(filteredRows.length / pageSize);
   const paginatedRows = filteredRows.slice(
     (page - 1) * pageSize,
     page * pageSize
   );
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.search) count++;
+    if (filters.dateColumn && (filters.dateFrom || filters.dateTo)) count++;
+    if (filters.categoryColumn && filters.selectedCategories.length > 0) count++;
+    return count;
+  }, [filters]);
+
+  const clearFilters = () => {
+    setFilters({
+      search: "",
+      dateColumn: null,
+      dateFrom: "",
+      dateTo: "",
+      categoryColumn: null,
+      selectedCategories: [],
+    });
+    setPage(1);
+  };
 
   const renderCellValue = (value: unknown, column: ColumnAnalysis) => {
     const strValue = String(value ?? "");
@@ -80,7 +202,6 @@ export function SmartDataTable({
       return <span className="text-muted-foreground italic">-</span>;
     }
 
-    // Render based on type
     if (column.type === 'email') {
       return (
         <a 
@@ -115,7 +236,6 @@ export function SmartDataTable({
       );
     }
 
-    // Long text with tooltip
     if (strValue.length > 40) {
       return (
         <TooltipProvider>
@@ -176,24 +296,179 @@ export function SmartDataTable({
 
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-4">
+      {/* Search and Filter Bar */}
+      <div className="p-4 border-b border-border space-y-3">
+        <div className="flex items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar em todos os campos..."
-              value={search}
+              value={filters.search}
               onChange={(e) => {
-                setSearch(e.target.value);
+                setFilters(prev => ({ ...prev, search: e.target.value }));
                 setPage(1);
               }}
               className="pl-10"
             />
           </div>
+          
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="gap-2"
+          >
+            <Filter className="w-4 h-4" />
+            Filtros
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 justify-center">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="w-4 h-4 mr-1" />
+              Limpar
+            </Button>
+          )}
+          
           <Badge variant="outline" className="whitespace-nowrap">
             {filteredRows.length} registros
           </Badge>
         </div>
+
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="grid md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
+            {/* Date Filter */}
+            {dateColumns.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Calendar className="w-4 h-4" />
+                  Filtro por Data
+                </div>
+                <Select
+                  value={filters.dateColumn || ""}
+                  onValueChange={(value) => {
+                    setFilters(prev => ({ 
+                      ...prev, 
+                      dateColumn: value || null,
+                      dateFrom: "",
+                      dateTo: ""
+                    }));
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Selecione a coluna de data" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhum</SelectItem>
+                    {dateColumns.map(col => (
+                      <SelectItem key={col.name} value={col.name}>
+                        {col.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {filters.dateColumn && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">De</Label>
+                      <Input
+                        type="date"
+                        value={filters.dateFrom}
+                        onChange={(e) => {
+                          setFilters(prev => ({ ...prev, dateFrom: e.target.value }));
+                          setPage(1);
+                        }}
+                        className="h-9"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Até</Label>
+                      <Input
+                        type="date"
+                        value={filters.dateTo}
+                        onChange={(e) => {
+                          setFilters(prev => ({ ...prev, dateTo: e.target.value }));
+                          setPage(1);
+                        }}
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Category Filter */}
+            {categoryColumns.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Tag className="w-4 h-4" />
+                  Filtro por Categoria
+                </div>
+                <Select
+                  value={filters.categoryColumn || ""}
+                  onValueChange={(value) => {
+                    setFilters(prev => ({ 
+                      ...prev, 
+                      categoryColumn: value || null,
+                      selectedCategories: []
+                    }));
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Selecione a coluna" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhum</SelectItem>
+                    {categoryColumns.map(col => (
+                      <SelectItem key={col.name} value={col.name}>
+                        {col.displayName} ({col.uniqueValues} valores)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {filters.categoryColumn && categoryValues.length > 0 && (
+                  <ScrollArea className="h-[120px] border rounded-md p-2">
+                    <div className="space-y-2">
+                      {categoryValues.map(value => (
+                        <div key={value} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`cat-${value}`}
+                            checked={filters.selectedCategories.includes(value)}
+                            onCheckedChange={(checked) => {
+                              setFilters(prev => ({
+                                ...prev,
+                                selectedCategories: checked
+                                  ? [...prev.selectedCategories, value]
+                                  : prev.selectedCategories.filter(v => v !== value)
+                              }));
+                              setPage(1);
+                            }}
+                          />
+                          <Label 
+                            htmlFor={`cat-${value}`} 
+                            className="text-sm cursor-pointer flex-1"
+                          >
+                            {value}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <ScrollArea className="w-full">

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { DatasetRow } from "@/types/dataset";
 import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   PieChart,
   Pie,
@@ -15,9 +16,6 @@ import {
   Legend,
   AreaChart,
   Area,
-  RadialBarChart,
-  RadialBar,
-  Treemap,
 } from "recharts";
 import {
   Tooltip as UITooltip,
@@ -25,12 +23,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Info, Edit2, Save, X } from "lucide-react";
 
 interface SmartChartsProps {
   rows: DatasetRow[];
   columns: ColumnAnalysis[];
   chartSuggestions: ChartSuggestion[];
+  onUpdateRow?: (id: string, rowData: Record<string, unknown>) => void;
 }
 
 const COLORS = [
@@ -51,17 +59,38 @@ interface ChartData {
   value: number;
   fullName: string;
   fill?: string;
+  rowIds: string[];
 }
 
-export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProps) {
-  // Generate more chart types based on data
+interface EditModalState {
+  open: boolean;
+  chartIndex: number;
+  category: string;
+  rowIds: string[];
+}
+
+export function SmartCharts({ 
+  rows, 
+  columns, 
+  chartSuggestions,
+  onUpdateRow 
+}: SmartChartsProps) {
+  const [editModal, setEditModal] = useState<EditModalState>({
+    open: false,
+    chartIndex: -1,
+    category: "",
+    rowIds: [],
+  });
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+
+  // Generate chart types based on data (excluding radial/treemap)
   const enhancedSuggestions = useMemo(() => {
     const suggestions = [...chartSuggestions];
     
     // Find columns suitable for additional chart types
     const categoricalCols = columns.filter(c => c.isCategorical && c.uniqueValues >= 2);
     
-    // Add area chart for time-like data or sequential categories
+    // Add area chart for sequential categories
     if (categoricalCols.length > 0 && suggestions.length < 4) {
       const bestCol = categoricalCols.find(c => c.uniqueValues >= 4 && c.uniqueValues <= 15);
       if (bestCol && !suggestions.find(s => s.column === bestCol.name && s.type === 'area')) {
@@ -75,59 +104,34 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
       }
     }
     
-    // Add radial bar for small categorical data
-    if (categoricalCols.length > 0 && suggestions.length < 5) {
-      const smallCatCol = categoricalCols.find(c => c.uniqueValues >= 2 && c.uniqueValues <= 6);
-      if (smallCatCol && !suggestions.find(s => s.column === smallCatCol.name && s.type === 'radial')) {
-        suggestions.push({
-          type: 'radial',
-          column: smallCatCol.name,
-          title: `Comparativo - ${smallCatCol.displayName}`,
-          priority: smallCatCol.priority - 15,
-          description: `Gráfico radial comparando ${smallCatCol.displayName}`,
-        });
-      }
-    }
-    
-    // Add treemap for hierarchical view
-    if (categoricalCols.length > 0 && suggestions.length < 6) {
-      const treemapCol = categoricalCols.find(c => c.uniqueValues >= 3 && c.uniqueValues <= 12);
-      if (treemapCol && !suggestions.find(s => s.column === treemapCol.name && s.type === 'treemap')) {
-        suggestions.push({
-          type: 'treemap',
-          column: treemapCol.name,
-          title: `Proporções - ${treemapCol.displayName}`,
-          priority: treemapCol.priority - 20,
-          description: `Mapa de proporções para ${treemapCol.displayName}`,
-        });
-      }
-    }
-    
-    return suggestions.slice(0, 6);
+    return suggestions.slice(0, 5);
   }, [chartSuggestions, columns]);
 
   const chartsData = useMemo(() => {
     return enhancedSuggestions.map((suggestion) => {
-      const counts: Record<string, number> = {};
+      const counts: Record<string, { count: number; rowIds: string[] }> = {};
       
       rows.forEach((row) => {
         const value = row.row_data[suggestion.column];
         const strValue = value ? String(value).trim() : "N/A";
         if (strValue) {
-          counts[strValue] = (counts[strValue] || 0) + 1;
+          if (!counts[strValue]) {
+            counts[strValue] = { count: 0, rowIds: [] };
+          }
+          counts[strValue].count++;
+          counts[strValue].rowIds.push(row.id);
         }
       });
       
-      const maxItems = suggestion.type === 'pie' ? 8 : 
-                       suggestion.type === 'radial' ? 6 : 
-                       suggestion.type === 'treemap' ? 12 : 10;
+      const maxItems = suggestion.type === 'pie' ? 8 : 10;
       
       const data: ChartData[] = Object.entries(counts)
-        .map(([name, value], idx) => ({
+        .map(([name, { count, rowIds }], idx) => ({
           name: name.length > 20 ? name.slice(0, 20) + "..." : name,
           fullName: name,
-          value,
+          value: count,
           fill: COLORS[idx % COLORS.length],
+          rowIds,
         }))
         .sort((a, b) => b.value - a.value)
         .slice(0, maxItems);
@@ -138,6 +142,43 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
       };
     });
   }, [rows, enhancedSuggestions]);
+
+  const handleEditCategory = (chartIndex: number, category: string, rowIds: string[]) => {
+    // Get the column name for this chart
+    const columnName = chartsData[chartIndex].suggestion.column;
+    
+    // Initialize edit values with current category for all rows
+    const initialValues: Record<string, string> = {};
+    rowIds.forEach(id => {
+      initialValues[id] = category;
+    });
+    
+    setEditValues(initialValues);
+    setEditModal({
+      open: true,
+      chartIndex,
+      category,
+      rowIds,
+    });
+  };
+
+  const handleSaveEdits = () => {
+    if (!onUpdateRow) return;
+    
+    const columnName = chartsData[editModal.chartIndex].suggestion.column;
+    
+    // Update each row with its new value
+    editModal.rowIds.forEach(rowId => {
+      const row = rows.find(r => r.id === rowId);
+      if (row && editValues[rowId] !== undefined) {
+        const newRowData = { ...row.row_data, [columnName]: editValues[rowId] };
+        onUpdateRow(rowId, newRowData);
+      }
+    });
+    
+    setEditModal({ open: false, chartIndex: -1, category: "", rowIds: [] });
+    setEditValues({});
+  };
 
   if (chartsData.length === 0) {
     return (
@@ -160,13 +201,30 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
           <p className="text-xs text-muted-foreground">
             {((data.value / rows.length) * 100).toFixed(1)}% do total
           </p>
+          {onUpdateRow && (
+            <p className="text-xs text-primary mt-1">Clique para editar</p>
+          )}
         </div>
       );
     }
     return null;
   };
 
-  const renderChart = (suggestion: ChartSuggestion, data: ChartData[]) => {
+  const handleChartClick = (chartIndex: number, data: ChartData) => {
+    if (onUpdateRow && data.rowIds.length > 0) {
+      handleEditCategory(chartIndex, data.fullName, data.rowIds);
+    }
+  };
+
+  const renderChart = (suggestion: ChartSuggestion, data: ChartData[], chartIndex: number) => {
+    const chartClickHandler = onUpdateRow 
+      ? (chartData: any) => {
+          if (chartData?.activePayload?.[0]?.payload) {
+            handleChartClick(chartIndex, chartData.activePayload[0].payload);
+          }
+        }
+      : undefined;
+
     switch (suggestion.type) {
       case 'pie':
         return (
@@ -179,6 +237,8 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
               outerRadius={90}
               paddingAngle={2}
               dataKey="value"
+              onClick={(_, index) => onUpdateRow && handleChartClick(chartIndex, data[index])}
+              style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
             >
               {data.map((_, idx) => (
                 <Cell
@@ -203,6 +263,8 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
             data={data}
             layout="vertical"
             margin={{ left: 10, right: 20 }}
+            onClick={chartClickHandler}
+            style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
           >
             <XAxis type="number" tick={{ fontSize: 11 }} />
             <YAxis
@@ -223,7 +285,12 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
       
       case 'area':
         return (
-          <AreaChart data={data} margin={{ left: -10, right: 10 }}>
+          <AreaChart 
+            data={data} 
+            margin={{ left: -10, right: 10 }}
+            onClick={chartClickHandler}
+            style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
+          >
             <defs>
               <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.8}/>
@@ -251,54 +318,14 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
           </AreaChart>
         );
       
-      case 'radial':
-        const radialData = data.map((d, i) => ({
-          ...d,
-          fill: COLORS[i % COLORS.length],
-        }));
-        return (
-          <RadialBarChart
-            cx="50%"
-            cy="50%"
-            innerRadius="20%"
-            outerRadius="90%"
-            data={radialData}
-            startAngle={180}
-            endAngle={0}
-          >
-            <RadialBar
-              dataKey="value"
-              cornerRadius={5}
-              background={{ fill: 'hsl(var(--muted))' }}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend
-              iconSize={10}
-              layout="horizontal"
-              verticalAlign="bottom"
-              formatter={(value) => (
-                <span className="text-xs text-foreground">{value}</span>
-              )}
-            />
-          </RadialBarChart>
-        );
-      
-      case 'treemap':
-        return (
-          <Treemap
-            data={data}
-            dataKey="value"
-            aspectRatio={4 / 3}
-            stroke="hsl(var(--background))"
-            fill="hsl(142, 76%, 36%)"
-          >
-            <Tooltip content={<CustomTooltip />} />
-          </Treemap>
-        );
-      
       default: // bar chart
         return (
-          <BarChart data={data} margin={{ left: -10, right: 10 }}>
+          <BarChart 
+            data={data} 
+            margin={{ left: -10, right: 10 }}
+            onClick={chartClickHandler}
+            style={{ cursor: onUpdateRow ? 'pointer' : 'default' }}
+          >
             <XAxis
               dataKey="name"
               tick={{ fontSize: 10 }}
@@ -321,34 +348,152 @@ export function SmartCharts({ rows, columns, chartSuggestions }: SmartChartsProp
   };
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      {chartsData.map(({ suggestion, data }, index) => (
-        <Card key={index} className="border-border overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center justify-between">
-              <span>{suggestion.title}</span>
-              <TooltipProvider>
-                <UITooltip>
-                  <TooltipTrigger>
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{suggestion.description}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Coluna: {suggestion.column}
-                    </p>
-                  </TooltipContent>
-                </UITooltip>
-              </TooltipProvider>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              {renderChart(suggestion, data)}
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <>
+      <div className="grid md:grid-cols-2 gap-6">
+        {chartsData.map(({ suggestion, data }, index) => (
+          <Card key={index} className="border-border overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center justify-between">
+                <span>{suggestion.title}</span>
+                <div className="flex items-center gap-2">
+                  {onUpdateRow && (
+                    <TooltipProvider>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => {
+                              // Open edit for the largest category
+                              if (data.length > 0) {
+                                handleEditCategory(index, data[0].fullName, data[0].rowIds);
+                              }
+                            }}
+                          >
+                            <Edit2 className="w-4 h-4 text-muted-foreground" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Editar dados do gráfico</TooltipContent>
+                      </UITooltip>
+                    </TooltipProvider>
+                  )}
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{suggestion.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Coluna: {suggestion.column}
+                        </p>
+                        {onUpdateRow && (
+                          <p className="text-xs text-primary mt-1">
+                            Clique nas barras/fatias para editar
+                          </p>
+                        )}
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={280}>
+                {renderChart(suggestion, data, index)}
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Edit Modal */}
+      <Dialog 
+        open={editModal.open} 
+        onOpenChange={(open) => !open && setEditModal({ open: false, chartIndex: -1, category: "", rowIds: [] })}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit2 className="w-5 h-5" />
+              Editar Categoria: {editModal.category}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Edite o valor da categoria para os {editModal.rowIds.length} registros selecionados.
+              Você pode alterar individualmente ou aplicar o mesmo valor para todos.
+            </p>
+            
+            <div className="space-y-3 mb-4">
+              <Label>Aplicar a todos</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Novo valor para todos"
+                  onChange={(e) => {
+                    const newValues: Record<string, string> = {};
+                    editModal.rowIds.forEach(id => {
+                      newValues[id] = e.target.value;
+                    });
+                    setEditValues(newValues);
+                  }}
+                />
+              </div>
+            </div>
+            
+            <ScrollArea className="h-[200px] border rounded-md p-3">
+              <div className="space-y-2">
+                {editModal.rowIds.slice(0, 20).map((rowId, idx) => {
+                  const row = rows.find(r => r.id === rowId);
+                  const columnName = editModal.chartIndex >= 0 
+                    ? chartsData[editModal.chartIndex]?.suggestion?.column 
+                    : "";
+                  const identifier = row 
+                    ? (row.row_data[columns[0]?.name] || `Registro ${idx + 1}`)
+                    : `Registro ${idx + 1}`;
+                  
+                  return (
+                    <div key={rowId} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-24 truncate">
+                        {String(identifier).slice(0, 15)}
+                      </span>
+                      <Input
+                        className="h-8 flex-1"
+                        value={editValues[rowId] || ""}
+                        onChange={(e) => setEditValues(prev => ({
+                          ...prev,
+                          [rowId]: e.target.value
+                        }))}
+                      />
+                    </div>
+                  );
+                })}
+                {editModal.rowIds.length > 20 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    ... e mais {editModal.rowIds.length - 20} registros
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setEditModal({ open: false, chartIndex: -1, category: "", rowIds: [] })}
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdits}>
+              <Save className="w-4 h-4 mr-2" />
+              Salvar Alterações
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

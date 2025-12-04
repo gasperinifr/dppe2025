@@ -170,8 +170,8 @@ export default function Index() {
 
       <main className="container mx-auto px-4 py-8 space-y-8">
         <div className="grid lg:grid-cols-[300px_1fr] gap-8">
-          {/* Sidebar - Dataset Selector */}
-          <aside>
+          {/* Sidebar - Dataset Selector (Sticky) */}
+          <aside className="lg:self-start lg:sticky lg:top-4">
             <DatasetSelector
               datasets={datasets}
               selectedId={selectedDatasetId}
@@ -255,6 +255,9 @@ export default function Index() {
                     rows={rows} 
                     columns={selectedDataset.columns}
                     chartSuggestions={chartSuggestions}
+                    onUpdateRow={(id, rowData) => {
+                      updateRowMutation.mutate({ id, row_data: rowData });
+                    }}
                   />
                 )}
 
