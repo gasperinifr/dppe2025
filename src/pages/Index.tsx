@@ -24,7 +24,7 @@ import {
   useUpdateDatasetRow,
   useDeleteDatasetRow,
 } from "@/hooks/useDatasets";
-import { Dataset, DatasetRow } from "@/types/dataset";
+import { Dataset, DatasetRow, ChartConfig } from "@/types/dataset";
 import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
@@ -141,7 +141,12 @@ export default function Index() {
     setEditingDataset(dataset);
   };
 
-  const handleSaveDataset = (updates: { name: string; description: string | null; columns: ColumnAnalysis[] }) => {
+  const handleSaveDataset = (updates: { 
+    name: string; 
+    description: string | null; 
+    columns: ColumnAnalysis[];
+    chartConfigs?: ChartConfig[];
+  }) => {
     if (!editingDataset) return;
     
     updateDatasetMutation.mutate(
@@ -286,11 +291,12 @@ export default function Index() {
                 )}
 
                 {/* Charts */}
-                {!isLoading && rows.length > 0 && chartSuggestions.length > 0 && (
+                {!isLoading && rows.length > 0 && (chartSuggestions.length > 0 || selectedDataset.chartConfigs?.length) && (
                   <SmartCharts 
                     rows={rows} 
                     columns={selectedDataset.columns}
                     chartSuggestions={chartSuggestions}
+                    chartConfigs={selectedDataset.chartConfigs}
                     onUpdateRow={(id, rowData) => {
                       updateRowMutation.mutate({ id, row_data: rowData });
                     }}
