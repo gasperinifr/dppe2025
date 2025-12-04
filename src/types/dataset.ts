@@ -13,6 +13,7 @@ export interface Dataset {
   description: string | null;
   columns: ColumnAnalysis[];
   chartConfigs?: ChartConfig[];
+  chartValueOverrides?: Record<string, Record<string, number>>;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +37,7 @@ export interface DatasetUpdate {
   description?: string | null;
   columns?: ColumnAnalysis[];
   chartConfigs?: ChartConfig[];
+  chartValueOverrides?: Record<string, Record<string, number>>;
 }
 
 export interface DatasetRowInsert {

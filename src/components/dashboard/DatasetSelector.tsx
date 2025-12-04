@@ -47,7 +47,7 @@ export function DatasetSelector({
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 shadow-sm">
+    <div className="bg-card rounded-xl border border-border p-4 shadow-sm min-w-[320px]">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-foreground flex items-center gap-2">
           <Database className="w-4 h-4" />
@@ -67,7 +67,7 @@ export function DatasetSelector({
       </div>
       
       <ScrollArea className="h-[300px]">
-        <div className="space-y-2">
+        <div className="space-y-2 pr-2">
           {datasets.length === 0 ? (
             <div className="text-center py-8">
               <FileSpreadsheet className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
@@ -82,7 +82,7 @@ export function DatasetSelector({
             datasets.map((dataset) => (
               <div
                 key={dataset.id}
-                className={`relative p-3 rounded-lg cursor-pointer transition-all ${
+                className={`p-3 rounded-lg cursor-pointer transition-all ${
                   selectedId === dataset.id
                     ? "bg-primary/10 border-2 border-primary/40 shadow-sm"
                     : "bg-muted/50 hover:bg-muted border-2 border-transparent"

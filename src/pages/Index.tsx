@@ -297,8 +297,16 @@ export default function Index() {
                     columns={selectedDataset.columns}
                     chartSuggestions={chartSuggestions}
                     chartConfigs={selectedDataset.chartConfigs}
-                    onUpdateRow={(id, rowData) => {
-                      updateRowMutation.mutate({ id, row_data: rowData });
+                    chartValueOverrides={selectedDataset.chartValueOverrides}
+                    onUpdateChartValues={(columnName, values) => {
+                      const newOverrides = {
+                        ...(selectedDataset.chartValueOverrides || {}),
+                        [columnName]: values,
+                      };
+                      updateDatasetMutation.mutate({
+                        id: selectedDataset.id,
+                        updates: { chartValueOverrides: newOverrides },
+                      });
                     }}
                   />
                 )}
