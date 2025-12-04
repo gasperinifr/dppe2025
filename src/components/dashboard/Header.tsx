@@ -13,7 +13,7 @@ export function Header() {
               DPPE 2025
             </h1>
             <p className="text-white/70 text-sm">
-              Diretoria de Pesquisa, Pós-Graduação e Extensão
+              Diretoria de Pós-Graduação, Pesquisa e Extensão
             </p>
           </div>
         </div>

@@ -66,7 +66,7 @@ export function DatasetSelector({
         </TooltipProvider>
       </div>
       
-      <ScrollArea className="h-[250px]">
+      <ScrollArea className="h-[300px]">
         <div className="space-y-2">
           {datasets.length === 0 ? (
             <div className="text-center py-8">
@@ -82,7 +82,7 @@ export function DatasetSelector({
             datasets.map((dataset) => (
               <div
                 key={dataset.id}
-                className={`group relative p-3 rounded-lg cursor-pointer transition-all ${
+                className={`relative p-3 rounded-lg cursor-pointer transition-all ${
                   selectedId === dataset.id
                     ? "bg-primary/10 border-2 border-primary/40 shadow-sm"
                     : "bg-muted/50 hover:bg-muted border-2 border-transparent"
@@ -109,7 +109,7 @@ export function DatasetSelector({
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1">
                     {onEdit && (
                       <TooltipProvider>
                         <Tooltip>
@@ -139,7 +139,7 @@ export function DatasetSelector({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

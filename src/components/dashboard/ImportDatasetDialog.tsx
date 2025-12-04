@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -37,12 +37,10 @@ export function ImportDatasetDialog({
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<CSVAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
+  const processFile = async (selectedFile: File) => {
     setFile(selectedFile);
     setError(null);
     setAnalysis(null);
@@ -72,9 +70,43 @@ export function ImportDatasetDialog({
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      await processFile(selectedFile);
+    }
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const droppedFile = files[0];
+      if (droppedFile.name.toLowerCase().endsWith('.csv')) {
+        await processFile(droppedFile);
+      } else {
+        setError("Por favor, selecione um arquivo CSV válido.");
+      }
+    }
+  }, []);
+
   const handleSubmit = async () => {
     if (!analysis || !name) return;
-
     onImport(name, analysis.columns, analysis.rows, analysis.suggestedCharts);
   };
 
@@ -83,6 +115,7 @@ export function ImportDatasetDialog({
     setFile(null);
     setAnalysis(null);
     setError(null);
+    setIsDragOver(false);
     onClose();
   };
 
@@ -116,18 +149,31 @@ export function ImportDatasetDialog({
               accept=".csv"
               className="hidden"
             />
-            <Button
-              variant="outline"
-              className="w-full h-24 border-dashed"
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
+              className={`
+                w-full h-28 border-2 border-dashed rounded-lg cursor-pointer
+                flex flex-col items-center justify-center gap-2 transition-all
+                ${isDragOver 
+                  ? "border-primary bg-primary/10 scale-[1.02]" 
+                  : "border-border hover:border-primary/50 hover:bg-muted/50"
+                }
+                ${file ? "bg-muted/30" : ""}
+              `}
             >
-              <div className="flex flex-col items-center gap-2">
-                <Upload className="w-6 h-6 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  {file ? file.name : "Clique para selecionar um arquivo CSV"}
-                </span>
-              </div>
-            </Button>
+              <Upload className={`w-6 h-6 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+              <span className={`text-sm ${isDragOver ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                {isDragOver 
+                  ? "Solte o arquivo aqui"
+                  : file 
+                    ? file.name 
+                    : "Arraste ou clique para selecionar um arquivo CSV"
+                }
+              </span>
+            </div>
           </div>
 
           {error && (
@@ -182,6 +228,8 @@ export function ImportDatasetDialog({
                         {chart.type === 'pie' && '📊'}
                         {chart.type === 'bar' && '📈'}
                         {chart.type === 'horizontal-bar' && '📊'}
+                        {chart.type === 'area' && '📉'}
+                        {chart.type === 'radial' && '🎯'}
                         {' '}{chart.title}
                       </Badge>
                     ))}

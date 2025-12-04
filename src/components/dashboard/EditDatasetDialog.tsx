@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dataset } from "@/types/dataset";
 import { ColumnAnalysis } from "@/lib/csvAnalyzer";
 import {
@@ -37,18 +37,18 @@ export function EditDatasetDialog({
   onSave,
   isLoading,
 }: EditDatasetDialogProps) {
-  const [name, setName] = useState(dataset?.name || "");
-  const [description, setDescription] = useState(dataset?.description || "");
-  const [editedColumns, setEditedColumns] = useState<ColumnAnalysis[]>(columns);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [editedColumns, setEditedColumns] = useState<ColumnAnalysis[]>([]);
 
-  // Reset state when dataset changes
-  useState(() => {
-    if (dataset) {
+  // Reset state when dialog opens or dataset changes
+  useEffect(() => {
+    if (open && dataset) {
       setName(dataset.name);
       setDescription(dataset.description || "");
-      setEditedColumns(columns);
+      setEditedColumns(columns.length > 0 ? [...columns] : []);
     }
-  });
+  }, [open, dataset, columns]);
 
   const handleColumnDisplayNameChange = (index: number, newDisplayName: string) => {
     setEditedColumns(prev => {
@@ -116,29 +116,35 @@ export function EditDatasetDialog({
 
             <ScrollArea className="h-[250px] pr-4">
               <div className="space-y-3">
-                {editedColumns.map((col, index) => (
-                  <div
-                    key={col.name}
-                    className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground mb-1 font-mono">
-                        {col.name}
-                      </p>
-                      <Input
-                        value={col.displayName}
-                        onChange={(e) =>
-                          handleColumnDisplayNameChange(index, e.target.value)
-                        }
-                        className="h-8"
-                        placeholder="Nome de exibição"
-                      />
+                {editedColumns.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Nenhum campo encontrado neste dataset.
+                  </p>
+                ) : (
+                  editedColumns.map((col, index) => (
+                    <div
+                      key={col.name}
+                      className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground mb-1 font-mono">
+                          {col.name}
+                        </p>
+                        <Input
+                          value={col.displayName}
+                          onChange={(e) =>
+                            handleColumnDisplayNameChange(index, e.target.value)
+                          }
+                          className="h-8"
+                          placeholder="Nome de exibição"
+                        />
+                      </div>
+                      <div className="text-xs text-muted-foreground w-16 text-right">
+                        {col.type}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground w-16 text-right">
-                      {col.type}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </ScrollArea>
           </div>
