@@ -22,7 +22,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Save, Loader2, BarChart3, PieChart, TrendingUp, LineChart, Plus } from "lucide-react";
+import { Settings, Save, Loader2, BarChart3, PieChart, TrendingUp, LineChart, Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 
 interface EditDatasetDialogProps {
@@ -36,6 +47,7 @@ interface EditDatasetDialogProps {
     columns: ColumnAnalysis[];
     chartConfigs?: ChartConfig[];
   }) => void;
+  onDelete?: (id: string) => void;
   isLoading?: boolean;
 }
 
@@ -54,6 +66,7 @@ export function EditDatasetDialog({
   dataset,
   columns,
   onSave,
+  onDelete,
   isLoading,
 }: EditDatasetDialogProps) {
   const [name, setName] = useState("");
@@ -355,6 +368,54 @@ export function EditDatasetDialog({
                 )}
               </div>
             </div>
+
+            <Separator />
+
+            {/* Delete Dataset */}
+            {onDelete && (
+              <div className="space-y-3">
+                <Label className="text-base font-semibold text-destructive">
+                  Zona de Perigo
+                </Label>
+                <div className="p-4 border border-destructive/30 rounded-lg bg-destructive/5">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Esta ação é irreversível. Todos os dados serão permanentemente excluídos.
+                  </p>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm">
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir Dataset
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Dataset</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tem certeza que deseja excluir "{dataset?.name}"? 
+                          Esta ação não pode ser desfeita e todos os dados 
+                          serão permanentemente removidos.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            if (dataset) {
+                              onDelete(dataset.id);
+                              onClose();
+                            }
+                          }}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            )}
           </div>
         </ScrollArea>
 

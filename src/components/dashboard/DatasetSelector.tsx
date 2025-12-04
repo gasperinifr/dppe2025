@@ -1,19 +1,8 @@
 import { Dataset } from "@/types/dataset";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Database, Settings, FileSpreadsheet } from "lucide-react";
+import { Plus, Database, Settings, FileSpreadsheet } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -25,7 +14,6 @@ interface DatasetSelectorProps {
   datasets: Dataset[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onDelete: (id: string) => void;
   onNew: () => void;
   onEdit?: (dataset: Dataset) => void;
 }
@@ -34,7 +22,6 @@ export function DatasetSelector({
   datasets,
   selectedId,
   onSelect,
-  onDelete,
   onNew,
   onEdit,
 }: DatasetSelectorProps) {
@@ -109,55 +96,20 @@ export function DatasetSelector({
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-1 shrink-0">
-                    {onEdit && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit(dataset);
-                        }}
-                        title="Configurações"
-                      >
-                        <Settings className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                    
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => e.stopPropagation()}
-                          title="Excluir dataset"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir Dataset</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Tem certeza que deseja excluir "{dataset.name}"? 
-                            Esta ação não pode ser desfeita e todos os dados 
-                            serão permanentemente removidos.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => onDelete(dataset.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+                  {onEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(dataset);
+                      }}
+                      title="Configurações"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

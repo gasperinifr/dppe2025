@@ -209,15 +209,14 @@ export default function Index() {
     <div className="min-h-screen bg-background">
       <Header onLogout={handleSignOut} />
 
-      <main className="container mx-auto px-4 py-8 space-y-8">
-        <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+      <main className="w-full px-4 lg:px-6 py-8 space-y-8">
+        <div className="grid lg:grid-cols-[280px_1fr] gap-6">
           {/* Sidebar - Dataset Selector (Sticky) */}
           <aside className="lg:self-start lg:sticky lg:top-4">
             <DatasetSelector
               datasets={datasets}
               selectedId={selectedDatasetId}
               onSelect={setSelectedDatasetId}
-              onDelete={handleDeleteDataset}
               onNew={() => setImportOpen(true)}
               onEdit={handleEditDataset}
             />
@@ -343,6 +342,7 @@ export default function Index() {
         dataset={editingDataset}
         columns={editingDataset?.columns || []}
         onSave={handleSaveDataset}
+        onDelete={handleDeleteDataset}
         isLoading={updateDatasetMutation.isPending}
       />
 
