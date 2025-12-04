@@ -41,7 +41,8 @@ interface SmartChartsProps {
   columns: ColumnAnalysis[];
   chartSuggestions: ChartSuggestion[];
   chartConfigs?: ChartConfig[];
-  onUpdateRow?: (id: string, rowData: Record<string, unknown>) => void;
+  onUpdateChartValues?: (columnName: string, values: Record<string, number>) => void;
+  chartValueOverrides?: Record<string, Record<string, number>>;
 }
 
 const COLORS = [
@@ -62,7 +63,6 @@ interface ChartData {
   value: number;
   fullName: string;
   fill?: string;
-  rowIds: string[];
 }
 
 interface EditModalState {
@@ -75,7 +75,6 @@ interface CategoryEdit {
   name: string;
   value: number;
   originalValue: number;
-  rowIds: string[];
 }
 
 export function SmartCharts({ 
@@ -83,7 +82,8 @@ export function SmartCharts({
   columns, 
   chartSuggestions,
   chartConfigs,
-  onUpdateRow 
+  onUpdateChartValues,
+  chartValueOverrides = {}
 }: SmartChartsProps) {
   const [editModal, setEditModal] = useState<EditModalState>({
     open: false,
@@ -116,51 +116,57 @@ export function SmartCharts({
 
   const chartsData = useMemo(() => {
     return enhancedSuggestions.map((suggestion) => {
-      const counts: Record<string, { count: number; rowIds: string[] }> = {};
+      const counts: Record<string, number> = {};
       
       rows.forEach((row) => {
         const value = row.row_data[suggestion.column];
         const strValue = value ? String(value).trim() : "N/A";
         if (strValue) {
-          if (!counts[strValue]) {
-            counts[strValue] = { count: 0, rowIds: [] };
-          }
-          counts[strValue].count++;
-          counts[strValue].rowIds.push(row.id);
+          counts[strValue] = (counts[strValue] || 0) + 1;
         }
       });
+      
+      // Apply overrides if they exist for this column
+      const overrides = chartValueOverrides[suggestion.column] || {};
       
       const maxItems = suggestion.type === 'pie' ? 8 : 10;
       
       const data: ChartData[] = Object.entries(counts)
-        .map(([name, { count, rowIds }], idx) => ({
+        .map(([name, count], idx) => ({
           name: name.length > 20 ? name.slice(0, 20) + "..." : name,
           fullName: name,
-          value: count,
+          // Use override value if exists, otherwise use original count
+          value: overrides[name] !== undefined ? overrides[name] : count,
           fill: COLORS[idx % COLORS.length],
-          rowIds,
         }))
+        .filter(item => item.value > 0) // Filter out zero values
         .sort((a, b) => b.value - a.value)
         .slice(0, maxItems);
       
+      // Also keep track of original counts for editing
       return {
         suggestion,
         data,
+        originalCounts: counts,
       };
     });
-  }, [rows, enhancedSuggestions]);
+  }, [rows, enhancedSuggestions, chartValueOverrides]);
 
   const handleOpenEditModal = (chartIndex: number) => {
     const chartData = chartsData[chartIndex];
     const columnName = chartData.suggestion.column;
+    const overrides = chartValueOverrides[columnName] || {};
     
-    // Initialize category edits with current data
-    const edits: CategoryEdit[] = chartData.data.map(item => ({
-      name: item.fullName,
-      value: item.value,
-      originalValue: item.value,
-      rowIds: item.rowIds,
-    }));
+    // Initialize category edits with all categories from original counts
+    const edits: CategoryEdit[] = Object.entries(chartData.originalCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([name, originalCount]) => ({
+        name,
+        // Use override if exists, otherwise original
+        value: overrides[name] !== undefined ? overrides[name] : originalCount,
+        originalValue: originalCount,
+      }));
     
     setCategoryEdits(edits);
     setEditModal({
@@ -179,29 +185,17 @@ export function SmartCharts({
   };
 
   const handleSaveEdits = () => {
-    if (!onUpdateRow) return;
+    if (!onUpdateChartValues) return;
     
     const columnName = editModal.columnName;
     
-    // For each category that changed, update rows
+    // Build the values map
+    const values: Record<string, number> = {};
     categoryEdits.forEach(category => {
-      const diff = category.value - category.originalValue;
-      
-      if (diff > 0) {
-        // Need to add more rows with this category - can't add rows, just notify
-        console.log(`Increase not supported: would need to add ${diff} rows`);
-      } else if (diff < 0) {
-        // Need to remove some rows from this category - change them to "N/A" or remove the value
-        const rowsToModify = category.rowIds.slice(0, Math.abs(diff));
-        rowsToModify.forEach(rowId => {
-          const row = rows.find(r => r.id === rowId);
-          if (row) {
-            const newRowData = { ...row.row_data, [columnName]: "" };
-            onUpdateRow(rowId, newRowData);
-          }
-        });
-      }
+      values[category.name] = category.value;
     });
+    
+    onUpdateChartValues(columnName, values);
     
     setEditModal({ open: false, chartIndex: -1, columnName: "" });
     setCategoryEdits([]);
@@ -384,7 +378,7 @@ export function SmartCharts({
               <CardTitle className="text-lg flex items-center justify-between">
                 <span>{suggestion.title}</span>
                 <div className="flex items-center gap-2">
-                  {onUpdateRow && (
+                  {onUpdateChartValues && (
                     <TooltipProvider>
                       <UITooltip>
                         <TooltipTrigger asChild>
@@ -453,7 +447,7 @@ export function SmartCharts({
                         {category.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Original: {category.originalValue} registros
+                        Dados originais: {category.originalValue}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -463,9 +457,8 @@ export function SmartCharts({
                         value={category.value}
                         onChange={(e) => handleCategoryValueChange(idx, parseInt(e.target.value) || 0)}
                         min={0}
-                        max={category.originalValue}
                       />
-                      <span className="text-xs text-muted-foreground w-8">
+                      <span className="text-xs w-10">
                         {category.value !== category.originalValue && (
                           <span className={category.value < category.originalValue ? "text-destructive" : "text-primary"}>
                             {category.value - category.originalValue > 0 ? "+" : ""}{category.value - category.originalValue}
@@ -479,7 +472,7 @@ export function SmartCharts({
             </ScrollArea>
             
             <p className="text-xs text-muted-foreground mt-3">
-              Nota: Apenas a redução de valores é suportada (remove registros da categoria).
+              Os valores alterados serão exibidos no gráfico. Valores originais permanecem nos dados.
             </p>
           </div>
 

@@ -350,11 +350,11 @@ export function SmartDataTable({
                   Filtro por Data
                 </div>
                 <Select
-                  value={filters.dateColumn || ""}
+                  value={filters.dateColumn || "_none"}
                   onValueChange={(value) => {
                     setFilters(prev => ({ 
                       ...prev, 
-                      dateColumn: value || null,
+                      dateColumn: value === "_none" ? null : value,
                       dateFrom: "",
                       dateTo: ""
                     }));
@@ -365,7 +365,7 @@ export function SmartDataTable({
                     <SelectValue placeholder="Selecione a coluna de data" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value="_none">Nenhum</SelectItem>
                     {dateColumns.map(col => (
                       <SelectItem key={col.name} value={col.name}>
                         {col.displayName}
@@ -413,11 +413,11 @@ export function SmartDataTable({
                   Filtro por Categoria
                 </div>
                 <Select
-                  value={filters.categoryColumn || ""}
+                  value={filters.categoryColumn || "_none"}
                   onValueChange={(value) => {
                     setFilters(prev => ({ 
                       ...prev, 
-                      categoryColumn: value || null,
+                      categoryColumn: value === "_none" ? null : value,
                       selectedCategories: []
                     }));
                     setPage(1);
@@ -427,7 +427,7 @@ export function SmartDataTable({
                     <SelectValue placeholder="Selecione a coluna" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value="_none">Nenhum</SelectItem>
                     {categoryColumns.map(col => (
                       <SelectItem key={col.name} value={col.name}>
                         {col.displayName} ({col.uniqueValues} valores)

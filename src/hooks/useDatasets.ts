@@ -6,7 +6,11 @@ import { Json } from "@/integrations/supabase/types";
 import { ColumnAnalysis } from "@/lib/csvAnalyzer";
 
 // Helper to convert DB columns to ColumnAnalysis with chartConfigs
-function parseColumnsData(columns: Json): { columns: ColumnAnalysis[]; chartConfigs?: ChartConfig[] } {
+function parseColumnsData(columns: Json): { 
+  columns: ColumnAnalysis[]; 
+  chartConfigs?: ChartConfig[];
+  chartValueOverrides?: Record<string, Record<string, number>>;
+} {
   if (Array.isArray(columns)) {
     // Check if it's the new format with chartConfigs
     const firstItem = columns[0];
@@ -16,6 +20,7 @@ function parseColumnsData(columns: Json): { columns: ColumnAnalysis[]; chartConf
         return {
           columns: (obj.columns as ColumnAnalysis[]) || [],
           chartConfigs: obj.chartConfigs as ChartConfig[] | undefined,
+          chartValueOverrides: obj.chartValueOverrides as Record<string, Record<string, number>> | undefined,
         };
       }
     }
@@ -27,13 +32,14 @@ function parseColumnsData(columns: Json): { columns: ColumnAnalysis[]; chartConf
 
 // Helper to convert DB data to Dataset
 function toDataset(data: Record<string, unknown>): Dataset {
-  const { columns, chartConfigs } = parseColumnsData(data.columns as Json);
+  const { columns, chartConfigs, chartValueOverrides } = parseColumnsData(data.columns as Json);
   return {
     id: data.id as string,
     name: data.name as string,
     description: data.description as string | null,
     columns,
     chartConfigs,
+    chartValueOverrides,
     created_at: data.created_at as string,
     updated_at: data.updated_at as string,
   };
@@ -112,19 +118,29 @@ export function useUpdateDataset() {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: DatasetUpdate }) => {
+      // First, get current data to merge
+      const { data: current, error: fetchError } = await supabase
+        .from("datasets")
+        .select("columns")
+        .eq("id", id)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      const currentParsed = parseColumnsData(current.columns as Json);
+      
       const updateData: Record<string, unknown> = {};
       
       if (updates.name !== undefined) updateData.name = updates.name;
       if (updates.description !== undefined) updateData.description = updates.description;
       
-      // Store columns and chartConfigs together
-      if (updates.columns !== undefined || updates.chartConfigs !== undefined) {
-        const columnsData = [{
-          columns: updates.columns,
-          chartConfigs: updates.chartConfigs,
-        }];
-        updateData.columns = columnsData as unknown as Json;
-      }
+      // Store columns, chartConfigs, and chartValueOverrides together
+      const columnsData = [{
+        columns: updates.columns ?? currentParsed.columns,
+        chartConfigs: updates.chartConfigs ?? currentParsed.chartConfigs,
+        chartValueOverrides: updates.chartValueOverrides ?? currentParsed.chartValueOverrides,
+      }];
+      updateData.columns = columnsData as unknown as Json;
 
       const { error } = await supabase
         .from("datasets")
