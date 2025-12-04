@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/dashboard/Header";
 import { DatasetSelector } from "@/components/dashboard/DatasetSelector";
 import { SmartStats } from "@/components/dashboard/SmartStats";
@@ -9,8 +10,10 @@ import { EditRowDialog } from "@/components/dashboard/EditRowDialog";
 import { EditDatasetDialog } from "@/components/dashboard/EditDatasetDialog";
 import { DeleteConfirmDialog } from "@/components/dashboard/DeleteConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, FileSpreadsheet, Settings } from "lucide-react";
+import { RefreshCw, FileSpreadsheet, Settings, LogOut } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import {
   useDatasets,
   useDatasetRows,
@@ -25,11 +28,21 @@ import { Dataset, DatasetRow } from "@/types/dataset";
 import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading, signOut } = useAuth();
+  
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<DatasetRow | null>(null);
   const [editingDataset, setEditingDataset] = useState<Dataset | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
 
   const { data: datasets = [], isLoading: loadingDatasets, refetch: refetchDatasets } = useDatasets();
   const { data: rows = [], isLoading: loadingRows, refetch: refetchRows } = useDatasetRows(selectedDatasetId);
@@ -47,6 +60,15 @@ export default function Index() {
   if (!selectedDatasetId && datasets.length > 0 && !loadingDatasets) {
     setSelectedDatasetId(datasets[0].id);
   }
+
+  const handleSignOut = async () => {
+    const { error } = await signOut();
+    if (error) {
+      toast.error('Erro ao sair');
+    } else {
+      navigate('/auth');
+    }
+  };
 
   // Generate chart suggestions from column analysis
   const chartSuggestions = useMemo((): ChartSuggestion[] => {
@@ -164,9 +186,23 @@ export default function Index() {
   const isLoading = loadingDatasets || loadingRows;
   const isImporting = createDatasetMutation.isPending || bulkInsertRowsMutation.isPending;
 
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // If not authenticated, don't render (redirect will happen via useEffect)
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header onLogout={handleSignOut} />
 
       <main className="container mx-auto px-4 py-8 space-y-8">
         <div className="grid lg:grid-cols-[300px_1fr] gap-8">
