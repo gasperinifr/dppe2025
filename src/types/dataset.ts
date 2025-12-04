@@ -1,8 +1,10 @@
+import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
+
 export interface Dataset {
   id: string;
   name: string;
   description: string | null;
-  columns: string[];
+  columns: ColumnAnalysis[];
   created_at: string;
   updated_at: string;
 }
@@ -17,7 +19,13 @@ export interface DatasetRow {
 export interface DatasetInsert {
   name: string;
   description?: string | null;
-  columns: string[];
+  columns: ColumnAnalysis[];
+}
+
+export interface DatasetUpdate {
+  name?: string;
+  description?: string | null;
+  columns?: ColumnAnalysis[];
 }
 
 export interface DatasetRowInsert {

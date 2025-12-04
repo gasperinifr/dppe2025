@@ -9,13 +9,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Loader2, FileSpreadsheet } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Upload, Loader2, FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { analyzeCSV, CSVAnalysisResult, ColumnAnalysis } from "@/lib/csvAnalyzer";
 
 interface ImportDatasetDialogProps {
   open: boolean;
   onClose: () => void;
-  onImport: (name: string, columns: string[], rows: Record<string, unknown>[]) => void;
+  onImport: (
+    name: string,
+    columns: ColumnAnalysis[],
+    rows: Record<string, unknown>[],
+    chartSuggestions: CSVAnalysisResult['suggestedCharts']
+  ) => void;
   isLoading?: boolean;
 }
 
@@ -27,119 +35,60 @@ export function ImportDatasetDialog({
 }: ImportDatasetDialogProps) {
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<{ columns: string[]; rowCount: number } | null>(null);
+  const [analysis, setAnalysis] = useState<CSVAnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const parseCSV = (content: string): { columns: string[]; rows: Record<string, unknown>[] } => {
-    const lines = content.split("\n");
-    const rows: Record<string, unknown>[] = [];
-    let columns: string[] = [];
-    let buffer = "";
-    let isFirstLine = true;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      buffer += (buffer ? "\n" : "") + line;
-
-      const quoteCount = (buffer.match(/"/g) || []).length;
-      if (quoteCount % 2 !== 0) continue;
-
-      const parsedLine = parseCSVLine(buffer);
-      buffer = "";
-
-      if (isFirstLine) {
-        columns = parsedLine.map((col) => col.trim());
-        isFirstLine = false;
-        continue;
-      }
-
-      if (parsedLine.length >= columns.length) {
-        const row: Record<string, unknown> = {};
-        columns.forEach((col, idx) => {
-          row[col] = cleanValue(parsedLine[idx]);
-        });
-        rows.push(row);
-      }
-    }
-
-    return { columns, rows };
-  };
-
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        result.push(current);
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current);
-    return result;
-  };
-
-  const cleanValue = (value: string | undefined): string => {
-    if (!value) return "";
-    return value.trim().replace(/^"|"$/g, "").replace(/\n/g, " ").trim();
-  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
     setFile(selectedFile);
+    setError(null);
+    setAnalysis(null);
 
     try {
       const content = await selectedFile.text();
-      const { columns, rows } = parseCSV(content);
+      const result = analyzeCSV(content);
       
-      setPreview({ columns, rowCount: rows.length });
+      if (result.rows.length === 0) {
+        setError("Nenhum dado válido encontrado no arquivo");
+        return;
+      }
+
+      setAnalysis(result);
       
       // Auto-generate name from filename
-      const baseName = selectedFile.name.replace(/\.csv$/i, "").replace(/_/g, " ");
+      const baseName = selectedFile.name
+        .replace(/\.csv$/i, "")
+        .replace(/_/g, " ")
+        .replace(/-/g, " ");
       setName(baseName);
-    } catch (error) {
-      toast.error("Erro ao ler arquivo CSV");
-      console.error(error);
+      
+      toast.success(`Arquivo analisado: ${result.cleanedRows} registros válidos`);
+    } catch (err) {
+      setError("Erro ao analisar arquivo CSV. Verifique o formato.");
+      console.error(err);
     }
   };
 
   const handleSubmit = async () => {
-    if (!file || !name) return;
+    if (!analysis || !name) return;
 
-    try {
-      const content = await file.text();
-      const { columns, rows } = parseCSV(content);
-
-      if (rows.length === 0) {
-        toast.error("Nenhum dado válido encontrado no arquivo");
-        return;
-      }
-
-      onImport(name, columns, rows);
-    } catch (error) {
-      toast.error("Erro ao processar arquivo");
-      console.error(error);
-    }
+    onImport(name, analysis.columns, analysis.rows, analysis.suggestedCharts);
   };
 
   const handleClose = () => {
     setName("");
     setFile(null);
-    setPreview(null);
+    setAnalysis(null);
+    setError(null);
     onClose();
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5" />
@@ -181,16 +130,71 @@ export function ImportDatasetDialog({
             </Button>
           </div>
 
-          {preview && (
-            <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-              <p className="text-sm font-medium">Pré-visualização:</p>
-              <p className="text-sm text-muted-foreground">
-                <strong>{preview.rowCount}</strong> registros encontrados
-              </p>
-              <p className="text-sm text-muted-foreground">
-                <strong>{preview.columns.length}</strong> colunas: {preview.columns.slice(0, 5).join(", ")}
-                {preview.columns.length > 5 && "..."}
-              </p>
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
+          {analysis && (
+            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-2 text-primary">
+                <CheckCircle className="w-4 h-4" />
+                <span className="font-medium">Análise Completa</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Registros válidos</p>
+                  <p className="font-semibold text-lg">{analysis.cleanedRows}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Campos detectados</p>
+                  <p className="font-semibold text-lg">{analysis.columns.length}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Campos encontrados:</p>
+                <ScrollArea className="h-[120px]">
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.columns.map((col) => (
+                      <Badge
+                        key={col.name}
+                        variant={col.isCategorical ? "default" : "secondary"}
+                        className="text-xs"
+                      >
+                        {col.displayName}
+                        <span className="ml-1 opacity-60">({col.type})</span>
+                      </Badge>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {analysis.suggestedCharts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Gráficos sugeridos:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.suggestedCharts.map((chart, i) => (
+                      <Badge key={i} variant="outline" className="text-xs">
+                        {chart.type === 'pie' && '📊'}
+                        {chart.type === 'bar' && '📈'}
+                        {chart.type === 'horizontal-bar' && '📊'}
+                        {' '}{chart.title}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analysis.totalRows !== analysis.cleanedRows && (
+                <p className="text-xs text-muted-foreground">
+                  * {analysis.totalRows - analysis.cleanedRows} linhas foram ignoradas 
+                  (vazias ou com dados inválidos)
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -201,14 +205,14 @@ export function ImportDatasetDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!file || !name || isLoading}
+            disabled={!analysis || !name || isLoading}
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               <Upload className="w-4 h-4 mr-2" />
             )}
-            Importar
+            Importar Dataset
           </Button>
         </DialogFooter>
       </DialogContent>

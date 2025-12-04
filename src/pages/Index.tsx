@@ -1,30 +1,34 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { DatasetSelector } from "@/components/dashboard/DatasetSelector";
-import { GenericStats } from "@/components/dashboard/GenericStats";
-import { GenericCharts } from "@/components/dashboard/GenericCharts";
-import { GenericDataTable } from "@/components/dashboard/GenericDataTable";
+import { SmartStats } from "@/components/dashboard/SmartStats";
+import { SmartCharts } from "@/components/dashboard/SmartCharts";
+import { SmartDataTable } from "@/components/dashboard/SmartDataTable";
 import { ImportDatasetDialog } from "@/components/dashboard/ImportDatasetDialog";
 import { EditRowDialog } from "@/components/dashboard/EditRowDialog";
+import { EditDatasetDialog } from "@/components/dashboard/EditDatasetDialog";
 import { DeleteConfirmDialog } from "@/components/dashboard/DeleteConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, FileSpreadsheet, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useDatasets,
   useDatasetRows,
   useCreateDataset,
   useDeleteDataset,
+  useUpdateDataset,
   useBulkInsertDatasetRows,
   useUpdateDatasetRow,
   useDeleteDatasetRow,
 } from "@/hooks/useDatasets";
-import { DatasetRow } from "@/types/dataset";
+import { Dataset, DatasetRow } from "@/types/dataset";
+import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<DatasetRow | null>(null);
+  const [editingDataset, setEditingDataset] = useState<Dataset | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
 
   const { data: datasets = [], isLoading: loadingDatasets, refetch: refetchDatasets } = useDatasets();
@@ -32,6 +36,7 @@ export default function Index() {
 
   const createDatasetMutation = useCreateDataset();
   const deleteDatasetMutation = useDeleteDataset();
+  const updateDatasetMutation = useUpdateDataset();
   const bulkInsertRowsMutation = useBulkInsertDatasetRows();
   const updateRowMutation = useUpdateDatasetRow();
   const deleteRowMutation = useDeleteDatasetRow();
@@ -43,7 +48,45 @@ export default function Index() {
     setSelectedDatasetId(datasets[0].id);
   }
 
-  const handleImport = async (name: string, columns: string[], rowsData: Record<string, unknown>[]) => {
+  // Generate chart suggestions from column analysis
+  const chartSuggestions = useMemo((): ChartSuggestion[] => {
+    if (!selectedDataset?.columns) return [];
+    
+    const suggestions: ChartSuggestion[] = [];
+    const columns = selectedDataset.columns;
+    
+    // Find best columns for charts
+    const categoricalColumns = columns.filter(c => c.isCategorical && c.uniqueValues >= 2);
+    
+    for (const col of categoricalColumns.slice(0, 2)) {
+      if (col.uniqueValues <= 8) {
+        suggestions.push({
+          type: 'pie',
+          column: col.name,
+          title: `Distribuição por ${col.displayName}`,
+          priority: col.priority,
+          description: `${col.uniqueValues} categorias`,
+        });
+      } else {
+        suggestions.push({
+          type: col.uniqueValues > 10 ? 'horizontal-bar' : 'bar',
+          column: col.name,
+          title: `Top ${Math.min(col.uniqueValues, 10)} - ${col.displayName}`,
+          priority: col.priority - 5,
+          description: `${col.uniqueValues} valores únicos`,
+        });
+      }
+    }
+    
+    return suggestions.slice(0, 4);
+  }, [selectedDataset]);
+
+  const handleImport = async (
+    name: string,
+    columns: ColumnAnalysis[],
+    rowsData: Record<string, unknown>[],
+    chartSuggestions: ChartSuggestion[]
+  ) => {
     createDatasetMutation.mutate(
       { name, columns },
       {
@@ -70,6 +113,23 @@ export default function Index() {
         }
       },
     });
+  };
+
+  const handleEditDataset = (dataset: Dataset) => {
+    setEditingDataset(dataset);
+  };
+
+  const handleSaveDataset = (updates: { name: string; description: string | null; columns: ColumnAnalysis[] }) => {
+    if (!editingDataset) return;
+    
+    updateDatasetMutation.mutate(
+      { id: editingDataset.id, updates },
+      {
+        onSuccess: () => {
+          setEditingDataset(null);
+        },
+      }
+    );
   };
 
   const handleEditRow = (row: DatasetRow) => {
@@ -118,6 +178,7 @@ export default function Index() {
               onSelect={setSelectedDatasetId}
               onDelete={handleDeleteDataset}
               onNew={() => setImportOpen(true)}
+              onEdit={handleEditDataset}
             />
           </aside>
 
@@ -131,6 +192,7 @@ export default function Index() {
                 </h2>
                 <p className="text-muted-foreground mb-6 max-w-md">
                   Importe um arquivo CSV para começar a visualizar e gerenciar seus dados.
+                  O sistema analisa automaticamente a estrutura e gera dashboards personalizados.
                 </p>
                 <Button onClick={() => setImportOpen(true)}>
                   Importar CSV
@@ -145,44 +207,62 @@ export default function Index() {
                       {selectedDataset.name}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                      {rows.length} registros • {selectedDataset.columns.length} colunas
+                      {rows.length} registros • {selectedDataset.columns.length} campos
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      refetchDatasets();
-                      refetchRows();
-                    }}
-                    disabled={isLoading}
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-                    Atualizar
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditDataset(selectedDataset)}
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Configurar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        refetchDatasets();
+                        refetchRows();
+                      }}
+                      disabled={isLoading}
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                      Atualizar
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Stats */}
                 {isLoading ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <Skeleton key={i} className="h-[80px] rounded-xl" />
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-[100px] rounded-xl" />
                     ))}
                   </div>
                 ) : (
-                  <GenericStats rows={rows} columns={selectedDataset.columns} />
+                  <SmartStats 
+                    rows={rows} 
+                    columns={selectedDataset.columns} 
+                    datasetName={selectedDataset.name}
+                  />
                 )}
 
                 {/* Charts */}
-                {!isLoading && rows.length > 0 && (
-                  <GenericCharts rows={rows} columns={selectedDataset.columns} />
+                {!isLoading && rows.length > 0 && chartSuggestions.length > 0 && (
+                  <SmartCharts 
+                    rows={rows} 
+                    columns={selectedDataset.columns}
+                    chartSuggestions={chartSuggestions}
+                  />
                 )}
 
                 {/* Table */}
                 {isLoading ? (
                   <Skeleton className="h-[400px] rounded-xl" />
                 ) : (
-                  <GenericDataTable
+                  <SmartDataTable
                     columns={selectedDataset.columns}
                     rows={rows}
                     onEdit={handleEditRow}
@@ -203,13 +283,23 @@ export default function Index() {
         isLoading={isImporting}
       />
 
+      {/* Edit Dataset Dialog */}
+      <EditDatasetDialog
+        open={!!editingDataset}
+        onClose={() => setEditingDataset(null)}
+        dataset={editingDataset}
+        columns={editingDataset?.columns || []}
+        onSave={handleSaveDataset}
+        isLoading={updateDatasetMutation.isPending}
+      />
+
       {/* Edit Row Dialog */}
       {selectedDataset && (
         <EditRowDialog
           open={!!editingRow}
           onClose={() => setEditingRow(null)}
           row={editingRow}
-          columns={selectedDataset.columns}
+          columns={selectedDataset.columns.map(c => c.name)}
           onSave={handleSaveRow}
           isLoading={updateRowMutation.isPending}
         />
