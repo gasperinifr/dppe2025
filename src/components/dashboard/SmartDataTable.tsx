@@ -19,10 +19,10 @@ import {
   Edit2,
   Trash2,
   Eye,
-  Filter,
-  X,
-  Calendar,
-  Tag,
+  ArrowUpAZ,
+  ArrowDownAZ,
+  ArrowUp01,
+  ArrowDown01,
 } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -43,9 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 
 interface SmartDataTableProps {
   columns: ColumnAnalysis[];
@@ -56,11 +53,8 @@ interface SmartDataTableProps {
 
 interface FilterState {
   search: string;
-  dateColumn: string | null;
-  dateFrom: string;
-  dateTo: string;
-  categoryColumn: string | null;
-  selectedCategories: string[];
+  sortColumn: string | null;
+  sortDirection: 'asc' | 'desc';
 }
 
 export function SmartDataTable({
@@ -72,39 +66,15 @@ export function SmartDataTable({
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<FilterState>({
     search: "",
-    dateColumn: null,
-    dateFrom: "",
-    dateTo: "",
-    categoryColumn: null,
-    selectedCategories: [],
+    sortColumn: null,
+    sortDirection: 'asc',
   });
-  const [showFilters, setShowFilters] = useState(false);
   const pageSize = 10;
 
   const displayColumns = useMemo(() => getDisplayColumns(columns, 6), [columns]);
-  
-  // Get date columns and category columns for filters
-  const dateColumns = useMemo(() => 
-    columns.filter(c => c.isDate || c.type === 'date'), [columns]);
-  
-  const categoryColumns = useMemo(() => 
-    columns.filter(c => c.isCategorical && c.uniqueValues >= 2 && c.uniqueValues <= 50), 
-    [columns]
-  );
 
-  // Get unique values for selected category column
-  const categoryValues = useMemo(() => {
-    if (!filters.categoryColumn) return [];
-    const values = new Set<string>();
-    rows.forEach(row => {
-      const val = row.row_data[filters.categoryColumn!];
-      if (val) values.add(String(val));
-    });
-    return Array.from(values).sort();
-  }, [rows, filters.categoryColumn]);
-
-  const filteredRows = useMemo(() => {
-    let result = rows;
+  const filteredAndSortedRows = useMemo(() => {
+    let result = [...rows];
 
     // Text search
     if (filters.search) {
@@ -116,82 +86,50 @@ export function SmartDataTable({
       );
     }
 
-    // Date filter
-    if (filters.dateColumn && (filters.dateFrom || filters.dateTo)) {
-      result = result.filter((row) => {
-        const dateValue = row.row_data[filters.dateColumn!];
-        if (!dateValue) return false;
+    // Sorting
+    if (filters.sortColumn) {
+      result.sort((a, b) => {
+        const aVal = String(a.row_data[filters.sortColumn!] || "").toLowerCase();
+        const bVal = String(b.row_data[filters.sortColumn!] || "").toLowerCase();
         
-        const dateStr = String(dateValue);
-        // Parse date - handle various formats
-        let date: Date | null = null;
+        // Try numeric sort first
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
         
-        if (dateStr.includes('/')) {
-          const parts = dateStr.split('/');
-          if (parts.length === 3) {
-            // DD/MM/YYYY or MM/DD/YYYY
-            const [a, b, c] = parts.map(p => parseInt(p));
-            if (a > 12) {
-              date = new Date(c, b - 1, a); // DD/MM/YYYY
-            } else {
-              date = new Date(c, a - 1, b); // MM/DD/YYYY
-            }
-          }
-        } else if (dateStr.includes('-')) {
-          date = new Date(dateStr);
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return filters.sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
         }
         
-        if (!date || isNaN(date.getTime())) return true; // Can't parse, include it
-        
-        if (filters.dateFrom) {
-          const from = new Date(filters.dateFrom);
-          if (date < from) return false;
-        }
-        
-        if (filters.dateTo) {
-          const to = new Date(filters.dateTo);
-          to.setHours(23, 59, 59, 999);
-          if (date > to) return false;
-        }
-        
-        return true;
-      });
-    }
-
-    // Category filter
-    if (filters.categoryColumn && filters.selectedCategories.length > 0) {
-      result = result.filter((row) => {
-        const value = String(row.row_data[filters.categoryColumn!] || "");
-        return filters.selectedCategories.includes(value);
+        // Fallback to string sort
+        const comparison = aVal.localeCompare(bVal, 'pt-BR');
+        return filters.sortDirection === 'asc' ? comparison : -comparison;
       });
     }
 
     return result;
   }, [rows, filters]);
 
-  const totalPages = Math.ceil(filteredRows.length / pageSize);
-  const paginatedRows = filteredRows.slice(
+  const totalPages = Math.ceil(filteredAndSortedRows.length / pageSize);
+  const paginatedRows = filteredAndSortedRows.slice(
     (page - 1) * pageSize,
     page * pageSize
   );
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (filters.search) count++;
-    if (filters.dateColumn && (filters.dateFrom || filters.dateTo)) count++;
-    if (filters.categoryColumn && filters.selectedCategories.length > 0) count++;
-    return count;
-  }, [filters]);
-
   const clearFilters = () => {
     setFilters({
       search: "",
-      dateColumn: null,
-      dateFrom: "",
-      dateTo: "",
-      categoryColumn: null,
-      selectedCategories: [],
+      sortColumn: null,
+      sortDirection: 'asc',
     });
+    setPage(1);
+  };
+
+  const handleSort = (columnName: string, direction: 'asc' | 'desc') => {
+    setFilters(prev => ({
+      ...prev,
+      sortColumn: columnName,
+      sortDirection: direction,
+    }));
     setPage(1);
   };
 
@@ -296,10 +234,10 @@ export function SmartDataTable({
 
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {/* Search and Filter Bar */}
-      <div className="p-4 border-b border-border space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
+      {/* Search and Sort Bar */}
+      <div className="p-4 border-b border-border">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar em todos os campos..."
@@ -312,163 +250,52 @@ export function SmartDataTable({
             />
           </div>
           
-          <Button
-            variant={showFilters ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className="gap-2"
+          {/* Sort Dropdown */}
+          <Select
+            value={filters.sortColumn ? `${filters.sortColumn}_${filters.sortDirection}` : "_none"}
+            onValueChange={(value) => {
+              if (value === "_none") {
+                setFilters(prev => ({ ...prev, sortColumn: null }));
+              } else {
+                const [col, dir] = value.split(/_(?=[^_]+$)/);
+                handleSort(col, dir as 'asc' | 'desc');
+              }
+            }}
           >
-            <Filter className="w-4 h-4" />
-            Filtros
-            {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 justify-center">
-                {activeFilterCount}
-              </Badge>
-            )}
-          </Button>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Ordenar por..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Sem ordenação</SelectItem>
+              {displayColumns.map(col => (
+                <>
+                  <SelectItem key={`${col.name}_asc`} value={`${col.name}_asc`}>
+                    <div className="flex items-center gap-2">
+                      <ArrowUpAZ className="w-4 h-4" />
+                      {col.displayName} (A-Z)
+                    </div>
+                  </SelectItem>
+                  <SelectItem key={`${col.name}_desc`} value={`${col.name}_desc`}>
+                    <div className="flex items-center gap-2">
+                      <ArrowDownAZ className="w-4 h-4" />
+                      {col.displayName} (Z-A)
+                    </div>
+                  </SelectItem>
+                </>
+              ))}
+            </SelectContent>
+          </Select>
 
-          {activeFilterCount > 0 && (
+          {(filters.search || filters.sortColumn) && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              <X className="w-4 h-4 mr-1" />
               Limpar
             </Button>
           )}
           
           <Badge variant="outline" className="whitespace-nowrap">
-            {filteredRows.length} registros
+            {filteredAndSortedRows.length} registros
           </Badge>
         </div>
-
-        {/* Advanced Filters */}
-        {showFilters && (
-          <div className="grid md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
-            {/* Date Filter */}
-            {dateColumns.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Calendar className="w-4 h-4" />
-                  Filtro por Data
-                </div>
-                <Select
-                  value={filters.dateColumn || "_none"}
-                  onValueChange={(value) => {
-                    setFilters(prev => ({ 
-                      ...prev, 
-                      dateColumn: value === "_none" ? null : value,
-                      dateFrom: "",
-                      dateTo: ""
-                    }));
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Selecione a coluna de data" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Nenhum</SelectItem>
-                    {dateColumns.map(col => (
-                      <SelectItem key={col.name} value={col.name}>
-                        {col.displayName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                {filters.dateColumn && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">De</Label>
-                      <Input
-                        type="date"
-                        value={filters.dateFrom}
-                        onChange={(e) => {
-                          setFilters(prev => ({ ...prev, dateFrom: e.target.value }));
-                          setPage(1);
-                        }}
-                        className="h-9"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Até</Label>
-                      <Input
-                        type="date"
-                        value={filters.dateTo}
-                        onChange={(e) => {
-                          setFilters(prev => ({ ...prev, dateTo: e.target.value }));
-                          setPage(1);
-                        }}
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Category Filter */}
-            {categoryColumns.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Tag className="w-4 h-4" />
-                  Filtro por Categoria
-                </div>
-                <Select
-                  value={filters.categoryColumn || "_none"}
-                  onValueChange={(value) => {
-                    setFilters(prev => ({ 
-                      ...prev, 
-                      categoryColumn: value === "_none" ? null : value,
-                      selectedCategories: []
-                    }));
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Selecione a coluna" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Nenhum</SelectItem>
-                    {categoryColumns.map(col => (
-                      <SelectItem key={col.name} value={col.name}>
-                        {col.displayName} ({col.uniqueValues} valores)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {filters.categoryColumn && categoryValues.length > 0 && (
-                  <ScrollArea className="h-[120px] border rounded-md p-2">
-                    <div className="space-y-2">
-                      {categoryValues.map(value => (
-                        <div key={value} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`cat-${value}`}
-                            checked={filters.selectedCategories.includes(value)}
-                            onCheckedChange={(checked) => {
-                              setFilters(prev => ({
-                                ...prev,
-                                selectedCategories: checked
-                                  ? [...prev.selectedCategories, value]
-                                  : prev.selectedCategories.filter(v => v !== value)
-                              }));
-                              setPage(1);
-                            }}
-                          />
-                          <Label 
-                            htmlFor={`cat-${value}`} 
-                            className="text-sm cursor-pointer flex-1"
-                          >
-                            {value}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <ScrollArea className="w-full">
