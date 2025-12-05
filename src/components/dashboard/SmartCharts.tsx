@@ -438,33 +438,33 @@ export function SmartCharts({
               Altere os valores numéricos de cada categoria. Diminuir o valor irá remover registros dessa categoria.
             </p>
             
-            <ScrollArea className="h-[300px] border rounded-md">
+            <ScrollArea className="h-[350px] border rounded-md">
               <div className="space-y-3 p-3">
                 {categoryEdits.map((category, idx) => (
-                  <div key={category.name} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" title={category.name}>
-                        {category.name}
-                      </p>
+                  <div key={category.name} className="p-3 bg-muted/30 rounded-lg space-y-2">
+                    <p className="text-sm font-medium break-words">
+                      {category.name}
+                    </p>
+                    <div className="flex items-center justify-between gap-3">
                       <p className="text-xs text-muted-foreground">
                         Dados originais: {category.originalValue}
                       </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Input
-                        type="number"
-                        className="h-9 w-20 text-center"
-                        value={category.value}
-                        onChange={(e) => handleCategoryValueChange(idx, parseInt(e.target.value) || 0)}
-                        min={0}
-                      />
-                      <span className="text-xs w-8 text-right">
-                        {category.value !== category.originalValue && (
-                          <span className={category.value < category.originalValue ? "text-destructive" : "text-primary"}>
-                            {category.value - category.originalValue > 0 ? "+" : ""}{category.value - category.originalValue}
-                          </span>
-                        )}
-                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Input
+                          type="number"
+                          className="h-9 w-20 text-center"
+                          value={category.value}
+                          onChange={(e) => handleCategoryValueChange(idx, parseInt(e.target.value) || 0)}
+                          min={0}
+                        />
+                        <span className="text-xs w-8 text-right">
+                          {category.value !== category.originalValue && (
+                            <span className={category.value < category.originalValue ? "text-destructive" : "text-primary"}>
+                              {category.value - category.originalValue > 0 ? "+" : ""}{category.value - category.originalValue}
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
