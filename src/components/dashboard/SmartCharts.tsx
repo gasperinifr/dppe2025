@@ -439,10 +439,10 @@ export function SmartCharts({
             </p>
             
             <ScrollArea className="h-[300px] border rounded-md p-3">
-              <div className="space-y-3">
+              <div className="space-y-3 pr-2">
                 {categoryEdits.map((category, idx) => (
-                  <div key={category.name} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg">
-                    <div className="flex-1 min-w-0">
+                  <div key={category.name} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg overflow-hidden">
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <p className="text-sm font-medium truncate" title={category.name}>
                         {category.name}
                       </p>
@@ -450,15 +450,15 @@ export function SmartCharts({
                         Dados originais: {category.originalValue}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <Input
                         type="number"
-                        className="h-9 w-24 text-center"
+                        className="h-9 w-20 text-center"
                         value={category.value}
                         onChange={(e) => handleCategoryValueChange(idx, parseInt(e.target.value) || 0)}
                         min={0}
                       />
-                      <span className="text-xs w-10">
+                      <span className="text-xs w-8 text-right">
                         {category.value !== category.originalValue && (
                           <span className={category.value < category.originalValue ? "text-destructive" : "text-primary"}>
                             {category.value - category.originalValue > 0 ? "+" : ""}{category.value - category.originalValue}

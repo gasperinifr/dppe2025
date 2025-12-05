@@ -10,7 +10,7 @@ import { EditRowDialog } from "@/components/dashboard/EditRowDialog";
 import { EditDatasetDialog } from "@/components/dashboard/EditDatasetDialog";
 import { DeleteConfirmDialog } from "@/components/dashboard/DeleteConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, FileSpreadsheet, Settings, LogOut } from "lucide-react";
+import { FileSpreadsheet, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -250,28 +250,14 @@ export default function Index() {
                       {rows.length} registros • {selectedDataset.columns.length} campos
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditDataset(selectedDataset)}
-                    >
-                      <Settings className="w-4 h-4 mr-2" />
-                      Configurar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        refetchDatasets();
-                        refetchRows();
-                      }}
-                      disabled={isLoading}
-                    >
-                      <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-                      Atualizar
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditDataset(selectedDataset)}
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Configurar
+                  </Button>
                 </div>
 
                 {/* Stats */}
