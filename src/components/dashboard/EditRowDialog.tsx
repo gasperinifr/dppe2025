@@ -53,16 +53,16 @@ export function EditRowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="truncate">Editar Registro</DialogTitle>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>Editar Registro</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-          <ScrollArea className="flex-1 min-h-0 max-h-[50vh] pr-4">
+        <form onSubmit={handleSubmit}>
+          <ScrollArea className="h-[400px] pr-4">
             <div className="space-y-4 py-2">
               {columns.map((col) => (
-                <div key={col} className="space-y-2 min-w-0">
+                <div key={col} className="space-y-2">
                   <Label htmlFor={col} className="truncate block" title={col}>{col}</Label>
                   {isLongValue(formData[col] || "") ? (
                     <Textarea
@@ -87,7 +87,7 @@ export function EditRowDialog({
             </div>
           </ScrollArea>
 
-          <DialogFooter className="mt-4 flex-shrink-0">
+          <DialogFooter className="mt-4">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
