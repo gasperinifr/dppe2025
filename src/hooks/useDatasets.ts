@@ -84,6 +84,10 @@ export function useCreateDataset() {
 
   return useMutation({
     mutationFn: async (dataset: DatasetInsert) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
       // Store columns and chartConfigs together
       const columnsData = [{
         columns: dataset.columns,
@@ -96,6 +100,7 @@ export function useCreateDataset() {
           name: dataset.name, 
           description: dataset.description,
           columns: columnsData as unknown as Json,
+          user_id: user.id,
         })
         .select()
         .single();
@@ -182,9 +187,14 @@ export function useBulkInsertDatasetRows() {
 
   return useMutation({
     mutationFn: async ({ datasetId, rows }: { datasetId: string; rows: Record<string, unknown>[] }) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
       const rowsToInsert = rows.map((row_data) => ({
         dataset_id: datasetId,
         row_data: row_data as Json,
+        user_id: user.id,
       }));
 
       // Insert in batches of 500

@@ -26,9 +26,13 @@ export function useCreateProjeto() {
 
   return useMutation({
     mutationFn: async (projeto: ProjetoInsert) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
       const { data, error } = await supabase
         .from("projetos_pesquisa")
-        .insert(projeto)
+        .insert({ ...projeto, user_id: user.id })
         .select()
         .single();
 
@@ -97,9 +101,15 @@ export function useBulkInsertProjetos() {
 
   return useMutation({
     mutationFn: async (projetos: ProjetoInsert[]) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const projetosWithUserId = projetos.map(p => ({ ...p, user_id: user.id }));
+
       const { data, error } = await supabase
         .from("projetos_pesquisa")
-        .insert(projetos)
+        .insert(projetosWithUserId)
         .select();
 
       if (error) throw error;
