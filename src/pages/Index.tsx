@@ -242,8 +242,8 @@ export default function Index() {
               <>
                 {/* Title + Actions */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-display font-semibold text-foreground">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xl font-display font-semibold text-foreground truncate" title={selectedDataset.name}>
                       {selectedDataset.name}
                     </h2>
                     <p className="text-sm text-muted-foreground">
@@ -253,6 +253,7 @@ export default function Index() {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="flex-shrink-0"
                     onClick={() => handleEditDataset(selectedDataset)}
                   >
                     <Settings className="w-4 h-4 mr-2" />

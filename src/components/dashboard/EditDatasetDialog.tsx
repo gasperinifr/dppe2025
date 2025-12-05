@@ -164,15 +164,15 @@ export function EditDatasetDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[700px] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            Configurações do Dataset
+            <Settings className="w-5 h-5 flex-shrink-0" />
+            <span className="truncate">Configurações do Dataset</span>
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="h-[500px] pr-4">
+        <ScrollArea className="flex-1 min-h-0 max-h-[60vh] pr-4">
           <div className="space-y-6 py-4">
             {/* Dataset Info */}
             <div className="space-y-4">
