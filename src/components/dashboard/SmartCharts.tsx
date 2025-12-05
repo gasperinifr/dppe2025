@@ -425,40 +425,40 @@ export function SmartCharts({
         open={editModal.open} 
         onOpenChange={(open) => !open && setEditModal({ open: false, chartIndex: -1, columnName: "" })}
       >
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <Edit2 className="w-5 h-5" />
-              Editar valores do gráfico
+              <Edit2 className="w-5 h-5 flex-shrink-0" />
+              <span className="truncate">Editar valores do gráfico</span>
             </DialogTitle>
           </DialogHeader>
           
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground mb-4">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <p className="text-sm text-muted-foreground mb-4 flex-shrink-0">
               Altere os valores numéricos de cada categoria. Diminuir o valor irá remover registros dessa categoria.
             </p>
             
-            <ScrollArea className="h-[300px] border rounded-md p-3">
-              <div className="space-y-3 pr-2">
+            <ScrollArea className="flex-1 min-h-0 border rounded-md">
+              <div className="space-y-3 p-3">
                 {categoryEdits.map((category, idx) => (
-                  <div key={category.name} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg overflow-hidden">
-                    <div className="flex-1 min-w-0 overflow-hidden">
+                  <div key={category.name} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg">
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate" title={category.name}>
                         {category.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground truncate">
                         Dados originais: {category.originalValue}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <Input
                         type="number"
-                        className="h-9 w-20 text-center"
+                        className="h-9 w-20 text-center flex-shrink-0"
                         value={category.value}
                         onChange={(e) => handleCategoryValueChange(idx, parseInt(e.target.value) || 0)}
                         min={0}
                       />
-                      <span className="text-xs w-8 text-right">
+                      <span className="text-xs w-8 text-right flex-shrink-0">
                         {category.value !== category.originalValue && (
                           <span className={category.value < category.originalValue ? "text-destructive" : "text-primary"}>
                             {category.value - category.originalValue > 0 ? "+" : ""}{category.value - category.originalValue}
@@ -471,12 +471,12 @@ export function SmartCharts({
               </div>
             </ScrollArea>
             
-            <p className="text-xs text-muted-foreground mt-3">
+            <p className="text-xs text-muted-foreground mt-3 flex-shrink-0">
               Os valores alterados serão exibidos no gráfico. Valores originais permanecem nos dados.
             </p>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 flex-shrink-0 pt-2">
             <Button 
               variant="outline" 
               onClick={() => setEditModal({ open: false, chartIndex: -1, columnName: "" })}
