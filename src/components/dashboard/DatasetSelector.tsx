@@ -69,7 +69,7 @@ export function DatasetSelector({
             datasets.map((dataset) => (
               <div
                 key={dataset.id}
-                className={`p-3 rounded-lg cursor-pointer transition-all ${
+                className={`p-3 rounded-lg cursor-pointer transition-all overflow-hidden ${
                   selectedId === dataset.id
                     ? "bg-primary/10 border-2 border-primary/40 shadow-sm"
                     : "bg-muted/50 hover:bg-muted border-2 border-transparent"
@@ -77,20 +77,20 @@ export function DatasetSelector({
                 onClick={() => onSelect(dataset.id)}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p className="font-medium text-sm text-foreground truncate" title={dataset.name}>
                       {dataset.name}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="secondary" className="text-xs">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <Badge variant="secondary" className="text-xs shrink-0">
                         {dataset.columns.length} campos
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {formatDate(dataset.created_at)}
                       </span>
                     </div>
                     {dataset.description && (
-                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                      <p className="text-xs text-muted-foreground mt-1 truncate" title={dataset.description}>
                         {dataset.description}
                       </p>
                     )}
