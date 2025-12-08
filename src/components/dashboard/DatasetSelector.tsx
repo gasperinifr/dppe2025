@@ -19,7 +19,7 @@ interface DatasetSelectorProps {
   onExport?: (dataset: Dataset) => void;
 }
 
-function truncateText(text: string, maxLength: number = 20): string {
+function truncateText(text: string, maxLength: number = 15): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + "...";
 }
@@ -87,8 +87,8 @@ export function DatasetSelector({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0 overflow-hidden">
-                          <p className="font-medium text-sm text-foreground truncate">
-                            {truncateText(dataset.name, 20)}
+                          <p className="font-medium text-sm text-foreground truncate max-w-[120px]">
+                            {truncateText(dataset.name, 15)}
                           </p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge variant="secondary" className="text-xs shrink-0">
@@ -99,8 +99,8 @@ export function DatasetSelector({
                             </span>
                           </div>
                           {dataset.description && (
-                            <p className="text-xs text-muted-foreground mt-1 truncate">
-                              {truncateText(dataset.description, 25)}
+                            <p className="text-xs text-muted-foreground mt-1 truncate max-w-[120px]">
+                              {truncateText(dataset.description, 15)}
                             </p>
                           )}
                         </div>

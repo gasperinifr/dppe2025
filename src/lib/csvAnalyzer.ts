@@ -1,6 +1,6 @@
 /**
- * Intelligent CSV Analyzer
- * Automatically detects column types, cleans data, and suggests best visualizations
+ * Intelligent CSV Analyzer - ROBUST VERSION
+ * Captures ALL rows and columns, handles various formats and encodings
  */
 
 export interface ColumnAnalysis {
@@ -15,7 +15,7 @@ export interface ColumnAnalysis {
   isNumeric: boolean;
   isDate: boolean;
   chartSuggestion: 'pie' | 'bar' | 'line' | 'none';
-  priority: number; // Higher = more important for display
+  priority: number;
 }
 
 export interface CSVAnalysisResult {
@@ -36,9 +36,6 @@ export interface ChartSuggestion {
   description: string;
 }
 
-// Common delimiters to try
-const DELIMITERS = [',', ';', '\t', '|'];
-
 // Patterns for type detection
 const PATTERNS = {
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
@@ -53,40 +50,39 @@ const PATTERNS = {
 };
 
 /**
- * Detect the best delimiter for a CSV content
+ * Detect the best delimiter by analyzing frequency and consistency
  */
 function detectDelimiter(content: string): string {
-  const firstLines = content.split('\n').slice(0, 10).join('\n');
+  const delimiters = [';', ',', '\t', '|'];
+  const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 20);
   
-  let bestDelimiter = ',';
-  let maxConsistency = 0;
+  if (lines.length === 0) return ';';
   
-  for (const delimiter of DELIMITERS) {
-    const lines = firstLines.split('\n').filter(l => l.trim());
-    if (lines.length < 2) continue;
-    
-    // Count delimiter occurrences per line
+  let bestDelimiter = ';';
+  let bestScore = 0;
+  
+  for (const delim of delimiters) {
     const counts = lines.map(line => {
       let count = 0;
       let inQuotes = false;
       for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') inQuotes = !inQuotes;
-        else if (char === delimiter && !inQuotes) count++;
+        if (line[i] === '"') inQuotes = !inQuotes;
+        else if (line[i] === delim && !inQuotes) count++;
       }
       return count;
     });
     
-    // Check consistency - all lines should have similar count
-    const firstCount = counts[0];
-    if (firstCount === 0) continue;
+    // Check if first line (header) has this delimiter
+    const headerCount = counts[0];
+    if (headerCount === 0) continue;
     
-    const consistent = counts.filter(c => c === firstCount).length;
-    const consistency = (consistent / counts.length) * firstCount;
+    // Calculate consistency score
+    const consistent = counts.filter(c => c === headerCount).length;
+    const score = headerCount * (consistent / counts.length);
     
-    if (consistency > maxConsistency) {
-      maxConsistency = consistency;
-      bestDelimiter = delimiter;
+    if (score > bestScore) {
+      bestScore = score;
+      bestDelimiter = delim;
     }
   }
   
@@ -94,80 +90,78 @@ function detectDelimiter(content: string): string {
 }
 
 /**
- * Parse a CSV line handling quotes and escaped characters - IMPROVED VERSION
+ * Parse a single CSV line with proper quote handling
  */
 function parseCSVLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-  let i = 0;
   
-  while (i < line.length) {
+  for (let i = 0; i < line.length; i++) {
     const char = line[i];
+    const nextChar = line[i + 1];
     
     if (char === '"') {
-      if (inQuotes) {
-        // Check for escaped quote
-        if (line[i + 1] === '"') {
-          current += '"';
-          i += 2;
-          continue;
-        } else {
-          // End of quoted field
-          inQuotes = false;
-          i++;
-          continue;
-        }
-      } else {
-        // Start of quoted field
-        inQuotes = true;
+      if (inQuotes && nextChar === '"') {
+        current += '"';
         i++;
-        continue;
+      } else {
+        inQuotes = !inQuotes;
       }
     } else if (char === delimiter && !inQuotes) {
-      result.push(current.trim());
+      result.push(cleanValue(current));
       current = '';
-      i++;
-      continue;
     } else {
       current += char;
-      i++;
     }
   }
   
-  // Don't forget the last field
-  result.push(current.trim());
+  // Add last field
+  result.push(cleanValue(current));
   
   return result;
 }
 
 /**
- * Clean a value, removing quotes and extra whitespace
+ * Clean and normalize a cell value
  */
-function cleanValue(value: string | undefined): string {
+function cleanValue(value: string): string {
   if (!value) return '';
-  return value
-    .trim()
-    .replace(/^["']|["']$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  
+  let cleaned = value.trim();
+  
+  // Remove surrounding quotes
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  
+  // Normalize escaped quotes
+  cleaned = cleaned.replace(/""/g, '"');
+  
+  // Normalize whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
 }
 
 /**
- * Detect the type of a column based on sample values
+ * Check if a row is essentially empty (all cells are empty or just dashes)
+ */
+function isRowEmpty(values: string[]): boolean {
+  return values.every(v => !v || v === '-' || v === 'undefined' || v === 'null');
+}
+
+/**
+ * Detect the type of a column based on its values
  */
 function detectColumnType(values: string[]): ColumnAnalysis['type'] {
-  const nonEmpty = values.filter(v => v && v.trim());
+  const nonEmpty = values.filter(v => v && v.trim() && v !== '-');
   if (nonEmpty.length === 0) return 'text';
   
   const sample = nonEmpty.slice(0, 100);
   
-  // Check patterns
-  let emailCount = 0;
-  let urlCount = 0;
-  let dateCount = 0;
-  let numberCount = 0;
-  let booleanCount = 0;
+  let emailCount = 0, urlCount = 0, dateCount = 0, numberCount = 0, booleanCount = 0;
   
   for (const val of sample) {
     if (PATTERNS.email.test(val)) emailCount++;
@@ -185,9 +179,9 @@ function detectColumnType(values: string[]): ColumnAnalysis['type'] {
   if (numberCount > threshold) return 'number';
   if (booleanCount > threshold) return 'boolean';
   
-  // Check if categorical (limited unique values)
+  // Check if categorical
   const uniqueValues = new Set(sample);
-  if (uniqueValues.size <= Math.min(20, sample.length * 0.3)) {
+  if (uniqueValues.size <= Math.min(30, sample.length * 0.5)) {
     return 'category';
   }
   
@@ -195,21 +189,15 @@ function detectColumnType(values: string[]): ColumnAnalysis['type'] {
 }
 
 /**
- * Determine chart suggestion based on column analysis
+ * Suggest chart type for a column
  */
-function suggestChart(column: ColumnAnalysis, totalRows: number): 'pie' | 'bar' | 'line' | 'none' {
+function suggestChart(column: ColumnAnalysis): 'pie' | 'bar' | 'line' | 'none' {
   if (column.isIdentifier || column.type === 'email' || column.type === 'url') {
     return 'none';
   }
   
-  if (column.isCategorical && column.uniqueValues <= 8) {
-    return 'pie';
-  }
-  
-  if (column.isCategorical && column.uniqueValues <= 20) {
-    return 'bar';
-  }
-  
+  if (column.isCategorical && column.uniqueValues <= 8) return 'pie';
+  if (column.isCategorical && column.uniqueValues <= 20) return 'bar';
   if (column.type === 'date' || (column.type === 'number' && column.uniqueValues > 10)) {
     return 'line';
   }
@@ -218,35 +206,24 @@ function suggestChart(column: ColumnAnalysis, totalRows: number): 'pie' | 'bar' 
 }
 
 /**
- * Calculate priority for display (higher = more important)
+ * Calculate display priority
  */
-function calculatePriority(columnName: string, type: ColumnAnalysis['type'], uniqueValues: number): number {
-  const lowerName = columnName.toLowerCase();
+function calculatePriority(name: string, type: ColumnAnalysis['type'], uniqueValues: number): number {
+  const lowerName = name.toLowerCase();
   let priority = 50;
   
-  // Title/Name columns are very important
   if (PATTERNS.title.test(lowerName)) priority += 40;
-  
-  // Category columns are good for grouping
   if (PATTERNS.category.test(lowerName)) priority += 30;
-  
-  // Dates are useful
-  if (type === 'date' || lowerName.includes('data') || lowerName.includes('date')) priority += 20;
-  
-  // Identifiers are less important for display
+  if (type === 'date' || lowerName.includes('data')) priority += 20;
   if (PATTERNS.identifier.test(lowerName)) priority -= 30;
-  
-  // Emails/URLs are less important
   if (type === 'email' || type === 'url') priority -= 20;
-  
-  // Columns with moderate unique values are more interesting
   if (uniqueValues > 2 && uniqueValues <= 15) priority += 15;
   
   return priority;
 }
 
 /**
- * Create a display-friendly name from a column name
+ * Create display name from column header
  */
 function createDisplayName(name: string): string {
   return name
@@ -258,109 +235,104 @@ function createDisplayName(name: string): string {
 }
 
 /**
- * Main CSV analysis function - IMPROVED to capture ALL rows
+ * MAIN CSV ANALYSIS - Robust version that captures ALL data
  */
 export function analyzeCSV(content: string): CSVAnalysisResult {
   // Normalize line endings
-  const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const delimiter = detectDelimiter(normalizedContent);
-  const lines = normalizedContent.split('\n');
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   
-  // Find header row (skip empty lines at start)
-  let headerIndex = 0;
-  while (headerIndex < lines.length && !lines[headerIndex].trim()) {
-    headerIndex++;
+  // Split into lines and filter completely empty lines
+  const allLines = normalized.split('\n');
+  const lines = allLines.filter(l => l.trim().length > 0);
+  
+  if (lines.length === 0) {
+    throw new Error('Arquivo CSV vazio');
   }
   
-  if (headerIndex >= lines.length) {
-    throw new Error('Arquivo CSV vazio ou inválido');
-  }
+  // Detect delimiter
+  const delimiter = detectDelimiter(normalized);
+  console.log(`CSV Analyzer: detected delimiter '${delimiter}', ${lines.length} non-empty lines`);
   
-  // Parse header
-  const headerLine = lines[headerIndex];
-  const rawColumns = parseCSVLine(headerLine, delimiter).map(cleanValue);
+  // Parse header (first non-empty line)
+  const headerLine = lines[0];
+  const rawHeaders = parseCSVLine(headerLine, delimiter);
   
-  // Filter out empty column names and create unique names
+  // Create unique column names
   const columnNames: string[] = [];
-  const columnMap = new Map<string, number>();
+  const nameCount: Record<string, number> = {};
   
-  for (let i = 0; i < rawColumns.length; i++) {
-    let col = rawColumns[i];
+  for (let i = 0; i < rawHeaders.length; i++) {
+    let name = rawHeaders[i] || `Coluna_${i + 1}`;
     
-    // If column is empty, generate a name
-    if (!col) {
-      col = `Coluna_${i + 1}`;
+    // Ensure uniqueness
+    if (nameCount[name]) {
+      nameCount[name]++;
+      name = `${name}_${nameCount[name]}`;
+    } else {
+      nameCount[name] = 1;
     }
     
-    let name = col;
-    const count = columnMap.get(col) || 0;
-    if (count > 0) {
-      name = `${col}_${count}`;
-    }
-    columnMap.set(col, count + 1);
     columnNames.push(name);
   }
   
-  // Determine expected column count from header
   const expectedColumns = columnNames.length;
+  console.log(`CSV Analyzer: ${expectedColumns} columns detected: ${columnNames.join(', ')}`);
   
-  // Parse data rows - IMPROVED: Accept all rows with at least some data
+  // Parse ALL data rows
   const rows: Record<string, unknown>[] = [];
   const columnValues: Map<string, string[]> = new Map();
   
-  for (const colName of columnNames) {
-    columnValues.set(colName, []);
-  }
+  columnNames.forEach(col => columnValues.set(col, []));
   
-  let totalDataLines = 0;
-  
-  for (let i = headerIndex + 1; i < lines.length; i++) {
+  for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
-    
-    // Skip completely empty lines
-    if (!line || !line.trim()) continue;
-    
-    totalDataLines++;
-    
     const values = parseCSVLine(line, delimiter);
     
-    // Accept row if it has any non-empty value
-    const nonEmptyValues = values.filter(v => v && v.trim()).length;
-    if (nonEmptyValues === 0) continue;
+    // Skip completely empty rows
+    if (isRowEmpty(values)) {
+      continue;
+    }
     
     const row: Record<string, unknown> = {};
-    let hasValidData = false;
+    let hasAnyData = false;
     
-    // Map values to columns - handle rows with more or fewer columns than header
-    for (let j = 0; j < columnNames.length; j++) {
+    // Map values to columns
+    for (let j = 0; j < expectedColumns; j++) {
       const colName = columnNames[j];
-      const value = j < values.length ? cleanValue(values[j]) : '';
+      const value = j < values.length ? values[j] : '';
       
       row[colName] = value || null;
       
-      if (value) {
-        hasValidData = true;
+      if (value && value !== '-') {
+        hasAnyData = true;
         columnValues.get(colName)?.push(value);
       }
     }
     
-    // Also capture extra columns if row has more values than header
-    if (values.length > columnNames.length) {
-      for (let j = columnNames.length; j < values.length; j++) {
-        const extraColName = `Extra_${j + 1}`;
-        const value = cleanValue(values[j]);
-        if (value) {
-          row[extraColName] = value;
+    // Handle extra columns (more values than headers)
+    for (let j = expectedColumns; j < values.length; j++) {
+      const value = values[j];
+      if (value && value !== '-') {
+        const extraCol = `Extra_${j + 1}`;
+        row[extraCol] = value;
+        
+        if (!columnValues.has(extraCol)) {
+          columnValues.set(extraCol, []);
+          columnNames.push(extraCol);
         }
+        columnValues.get(extraCol)?.push(value);
+        hasAnyData = true;
       }
     }
     
-    if (hasValidData) {
+    if (hasAnyData) {
       rows.push(row);
     }
   }
   
-  // Analyze each column
+  console.log(`CSV Analyzer: ${rows.length} data rows captured (from ${lines.length - 1} data lines)`);
+  
+  // Analyze columns
   const columnAnalyses: ColumnAnalysis[] = [];
   
   for (const colName of columnNames) {
@@ -390,7 +362,7 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
       priority: calculatePriority(colName, type, uniqueValues),
     };
     
-    analysis.chartSuggestion = suggestChart(analysis, rows.length);
+    analysis.chartSuggestion = suggestChart(analysis);
     columnAnalyses.push(analysis);
   }
   
@@ -400,7 +372,6 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
   // Generate chart suggestions
   const suggestedCharts: ChartSuggestion[] = [];
   
-  // Find best columns for each chart type
   const pieColumns = columnAnalyses
     .filter(c => c.chartSuggestion === 'pie' && c.uniqueValues >= 2)
     .slice(0, 2);
@@ -415,7 +386,7 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
       column: col.name,
       title: `Distribuição por ${col.displayName}`,
       priority: col.priority,
-      description: `${col.uniqueValues} categorias únicas`,
+      description: `${col.uniqueValues} categorias`,
     });
   }
   
@@ -429,19 +400,18 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
     });
   }
   
-  // Sort chart suggestions by priority
   suggestedCharts.sort((a, b) => b.priority - a.priority);
   
-  // Find primary (identifier) and title columns
+  // Find special columns
   const primaryColumn = columnAnalyses.find(c => c.isIdentifier)?.name || null;
-  const titleColumn = columnAnalyses.find(c => PATTERNS.title.test(c.name.toLowerCase()))?.name || 
-    columnAnalyses.find(c => c.type === 'text' && !c.isIdentifier && c.uniqueValues > rows.length * 0.5)?.name || 
+  const titleColumn = columnAnalyses.find(c => PATTERNS.title.test(c.name.toLowerCase()))?.name ||
+    columnAnalyses.find(c => c.type === 'text' && !c.isIdentifier && c.uniqueValues > rows.length * 0.5)?.name ||
     null;
   
   return {
     columns: columnAnalyses,
     rows,
-    totalRows: totalDataLines,
+    totalRows: lines.length - 1,
     cleanedRows: rows.length,
     suggestedCharts: suggestedCharts.slice(0, 4),
     primaryColumn,
