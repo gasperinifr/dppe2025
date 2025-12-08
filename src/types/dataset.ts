@@ -2,9 +2,18 @@ import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export interface ChartConfig {
   column: string;
-  type: 'pie' | 'bar' | 'horizontal-bar' | 'area' | 'line' | 'auto';
+  type: 'pie' | 'bar' | 'horizontal-bar' | 'area' | 'line' | 'table' | 'auto';
   enabled: boolean;
   title: string;
+  hideNumeric?: boolean; // For table chart type - hide frequency numbers
+}
+
+export interface StatsConfig {
+  label: string;
+  value: string;
+  icon: 'database' | 'file' | 'tag' | 'calendar' | 'hash' | 'trend';
+  description: string;
+  enabled: boolean;
 }
 
 export interface Dataset {
@@ -14,6 +23,7 @@ export interface Dataset {
   columns: ColumnAnalysis[];
   chartConfigs?: ChartConfig[];
   chartValueOverrides?: Record<string, Record<string, number>>;
+  statsConfigs?: StatsConfig[];
   created_at: string;
   updated_at: string;
 }
@@ -38,6 +48,7 @@ export interface DatasetUpdate {
   columns?: ColumnAnalysis[];
   chartConfigs?: ChartConfig[];
   chartValueOverrides?: Record<string, Record<string, number>>;
+  statsConfigs?: StatsConfig[];
 }
 
 export interface DatasetRowInsert {
