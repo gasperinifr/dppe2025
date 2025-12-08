@@ -1,6 +1,6 @@
 /**
- * Intelligent CSV Analyzer - ROBUST VERSION
- * Captures ALL rows and columns, handles various formats and encodings
+ * Intelligent CSV Analyzer - HANDLES MULTI-LINE VALUES
+ * Captures ALL rows and columns, handles quoted multi-line fields
  */
 
 export interface ColumnAnalysis {
@@ -50,38 +50,25 @@ const PATTERNS = {
 };
 
 /**
- * Detect the best delimiter by analyzing frequency and consistency
+ * Detect the best delimiter by analyzing the first line only
  */
-function detectDelimiter(content: string): string {
-  const delimiters = [';', ',', '\t', '|'];
-  const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 20);
+function detectDelimiter(firstLine: string): string {
+  const delimiters = [',', ';', '\t', '|'];
   
-  if (lines.length === 0) return ';';
-  
-  let bestDelimiter = ';';
-  let bestScore = 0;
+  let bestDelimiter = ',';
+  let maxCount = 0;
   
   for (const delim of delimiters) {
-    const counts = lines.map(line => {
-      let count = 0;
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        if (line[i] === '"') inQuotes = !inQuotes;
-        else if (line[i] === delim && !inQuotes) count++;
-      }
-      return count;
-    });
+    let count = 0;
+    let inQuotes = false;
     
-    // Check if first line (header) has this delimiter
-    const headerCount = counts[0];
-    if (headerCount === 0) continue;
+    for (let i = 0; i < firstLine.length; i++) {
+      if (firstLine[i] === '"') inQuotes = !inQuotes;
+      else if (firstLine[i] === delim && !inQuotes) count++;
+    }
     
-    // Calculate consistency score
-    const consistent = counts.filter(c => c === headerCount).length;
-    const score = headerCount * (consistent / counts.length);
-    
-    if (score > bestScore) {
-      bestScore = score;
+    if (count > maxCount) {
+      maxCount = count;
       bestDelimiter = delim;
     }
   }
@@ -90,36 +77,80 @@ function detectDelimiter(content: string): string {
 }
 
 /**
- * Parse a single CSV line with proper quote handling
+ * Parse CSV content handling multi-line quoted values
+ * This is the KEY function - it properly handles fields that span multiple lines
  */
-function parseCSVLine(line: string, delimiter: string): string[] {
-  const result: string[] = [];
-  let current = '';
+function parseCSVContent(content: string, delimiter: string): string[][] {
+  const records: string[][] = [];
+  let currentRecord: string[] = [];
+  let currentField = '';
   let inQuotes = false;
+  let i = 0;
   
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
+  // Normalize line endings
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  while (i < normalized.length) {
+    const char = normalized[i];
+    const nextChar = normalized[i + 1];
     
     if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        current += '"';
-        i++;
+      if (inQuotes) {
+        if (nextChar === '"') {
+          // Escaped quote - add single quote and skip next
+          currentField += '"';
+          i += 2;
+          continue;
+        } else {
+          // End of quoted field
+          inQuotes = false;
+          i++;
+          continue;
+        }
       } else {
-        inQuotes = !inQuotes;
+        // Start of quoted field
+        inQuotes = true;
+        i++;
+        continue;
       }
-    } else if (char === delimiter && !inQuotes) {
-      result.push(cleanValue(current));
-      current = '';
-    } else {
-      current += char;
+    }
+    
+    if (char === delimiter && !inQuotes) {
+      // End of field
+      currentRecord.push(cleanValue(currentField));
+      currentField = '';
+      i++;
+      continue;
+    }
+    
+    if (char === '\n' && !inQuotes) {
+      // End of record
+      currentRecord.push(cleanValue(currentField));
+      currentField = '';
+      
+      // Only add non-empty records
+      if (currentRecord.some(f => f && f.trim())) {
+        records.push(currentRecord);
+      }
+      currentRecord = [];
+      i++;
+      continue;
+    }
+    
+    // Regular character (including newlines inside quotes)
+    currentField += char;
+    i++;
+  }
+  
+  // Don't forget the last field and record
+  if (currentField || currentRecord.length > 0) {
+    currentRecord.push(cleanValue(currentField));
+    if (currentRecord.some(f => f && f.trim())) {
+      records.push(currentRecord);
     }
   }
   
-  // Add last field
-  result.push(cleanValue(current));
-  
-  return result;
+  return records;
 }
 
 /**
@@ -130,26 +161,19 @@ function cleanValue(value: string): string {
   
   let cleaned = value.trim();
   
+  // Replace internal newlines with space
+  cleaned = cleaned.replace(/\n/g, ' ');
+  
   // Remove surrounding quotes
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
       (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
     cleaned = cleaned.slice(1, -1);
   }
   
-  // Normalize escaped quotes
-  cleaned = cleaned.replace(/""/g, '"');
-  
-  // Normalize whitespace
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  // Normalize escaped quotes and whitespace
+  cleaned = cleaned.replace(/""/g, '"').replace(/\s+/g, ' ').trim();
   
   return cleaned;
-}
-
-/**
- * Check if a row is essentially empty (all cells are empty or just dashes)
- */
-function isRowEmpty(values: string[]): boolean {
-  return values.every(v => !v || v === '-' || v === 'undefined' || v === 'null');
 }
 
 /**
@@ -179,7 +203,6 @@ function detectColumnType(values: string[]): ColumnAnalysis['type'] {
   if (numberCount > threshold) return 'number';
   if (booleanCount > threshold) return 'boolean';
   
-  // Check if categorical
   const uniqueValues = new Set(sample);
   if (uniqueValues.size <= Math.min(30, sample.length * 0.5)) {
     return 'category';
@@ -235,27 +258,31 @@ function createDisplayName(name: string): string {
 }
 
 /**
- * MAIN CSV ANALYSIS - Robust version that captures ALL data
+ * MAIN CSV ANALYSIS - Handles multi-line quoted values properly
  */
 export function analyzeCSV(content: string): CSVAnalysisResult {
-  // Normalize line endings
-  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  
-  // Split into lines and filter completely empty lines
-  const allLines = normalized.split('\n');
-  const lines = allLines.filter(l => l.trim().length > 0);
-  
-  if (lines.length === 0) {
+  if (!content || !content.trim()) {
     throw new Error('Arquivo CSV vazio');
   }
   
-  // Detect delimiter
-  const delimiter = detectDelimiter(normalized);
-  console.log(`CSV Analyzer: detected delimiter '${delimiter}', ${lines.length} non-empty lines`);
+  // Get first line to detect delimiter
+  const firstNewline = content.indexOf('\n');
+  const firstLine = firstNewline > 0 ? content.substring(0, firstNewline) : content;
+  const delimiter = detectDelimiter(firstLine);
   
-  // Parse header (first non-empty line)
-  const headerLine = lines[0];
-  const rawHeaders = parseCSVLine(headerLine, delimiter);
+  console.log(`CSV Analyzer: delimiter = '${delimiter}'`);
+  
+  // Parse entire CSV handling multi-line values
+  const records = parseCSVContent(content, delimiter);
+  
+  if (records.length === 0) {
+    throw new Error('Nenhum registro encontrado no CSV');
+  }
+  
+  console.log(`CSV Analyzer: ${records.length} records parsed`);
+  
+  // First record is header
+  const rawHeaders = records[0];
   
   // Create unique column names
   const columnNames: string[] = [];
@@ -264,7 +291,6 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
   for (let i = 0; i < rawHeaders.length; i++) {
     let name = rawHeaders[i] || `Coluna_${i + 1}`;
     
-    // Ensure uniqueness
     if (nameCount[name]) {
       nameCount[name]++;
       name = `${name}_${nameCount[name]}`;
@@ -275,62 +301,48 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
     columnNames.push(name);
   }
   
-  const expectedColumns = columnNames.length;
-  console.log(`CSV Analyzer: ${expectedColumns} columns detected: ${columnNames.join(', ')}`);
+  console.log(`CSV Analyzer: columns = ${columnNames.join(', ')}`);
   
-  // Parse ALL data rows
+  // Process data rows
   const rows: Record<string, unknown>[] = [];
   const columnValues: Map<string, string[]> = new Map();
   
   columnNames.forEach(col => columnValues.set(col, []));
   
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    const values = parseCSVLine(line, delimiter);
-    
-    // Skip completely empty rows
-    if (isRowEmpty(values)) {
-      continue;
-    }
-    
+  for (let i = 1; i < records.length; i++) {
+    const record = records[i];
     const row: Record<string, unknown> = {};
-    let hasAnyData = false;
+    let hasData = false;
     
     // Map values to columns
-    for (let j = 0; j < expectedColumns; j++) {
+    for (let j = 0; j < columnNames.length; j++) {
       const colName = columnNames[j];
-      const value = j < values.length ? values[j] : '';
+      const value = j < record.length ? record[j] : '';
       
       row[colName] = value || null;
       
       if (value && value !== '-') {
-        hasAnyData = true;
+        hasData = true;
         columnValues.get(colName)?.push(value);
       }
     }
     
-    // Handle extra columns (more values than headers)
-    for (let j = expectedColumns; j < values.length; j++) {
-      const value = values[j];
+    // Handle extra columns
+    for (let j = columnNames.length; j < record.length; j++) {
+      const value = record[j];
       if (value && value !== '-') {
         const extraCol = `Extra_${j + 1}`;
         row[extraCol] = value;
-        
-        if (!columnValues.has(extraCol)) {
-          columnValues.set(extraCol, []);
-          columnNames.push(extraCol);
-        }
-        columnValues.get(extraCol)?.push(value);
-        hasAnyData = true;
+        hasData = true;
       }
     }
     
-    if (hasAnyData) {
+    if (hasData) {
       rows.push(row);
     }
   }
   
-  console.log(`CSV Analyzer: ${rows.length} data rows captured (from ${lines.length - 1} data lines)`);
+  console.log(`CSV Analyzer: ${rows.length} data rows with content`);
   
   // Analyze columns
   const columnAnalyses: ColumnAnalysis[] = [];
@@ -411,7 +423,7 @@ export function analyzeCSV(content: string): CSVAnalysisResult {
   return {
     columns: columnAnalyses,
     rows,
-    totalRows: lines.length - 1,
+    totalRows: records.length - 1,
     cleanedRows: rows.length,
     suggestedCharts: suggestedCharts.slice(0, 4),
     primaryColumn,
