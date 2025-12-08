@@ -24,7 +24,7 @@ import {
   useUpdateDatasetRow,
   useDeleteDatasetRow,
 } from "@/hooks/useDatasets";
-import { Dataset, DatasetRow, ChartConfig } from "@/types/dataset";
+import { Dataset, DatasetRow, ChartConfig, StatsConfig } from "@/types/dataset";
 import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
@@ -146,6 +146,7 @@ export default function Index() {
     description: string | null; 
     columns: ColumnAnalysis[];
     chartConfigs?: ChartConfig[];
+    statsConfigs?: StatsConfig[];
   }) => {
     if (!editingDataset) return;
     
@@ -157,6 +158,49 @@ export default function Index() {
         },
       }
     );
+  };
+
+  const handleExportCSV = (dataset: Dataset) => {
+    const datasetRows = rows.filter(r => r.dataset_id === dataset.id);
+    if (datasetRows.length === 0 && dataset.id !== selectedDatasetId) {
+      toast.error("Selecione o dataset antes de exportar");
+      return;
+    }
+    
+    const exportRows = dataset.id === selectedDatasetId ? rows : datasetRows;
+    const columnNames = dataset.columns.map(c => c.name);
+    
+    // Create CSV content
+    const header = columnNames.join(",");
+    const csvRows = exportRows.map(row => 
+      columnNames.map(col => {
+        const val = row.row_data[col];
+        const strVal = val === null || val === undefined ? "" : String(val);
+        // Escape quotes and wrap in quotes if contains comma
+        if (strVal.includes(",") || strVal.includes('"') || strVal.includes("\n")) {
+          return `"${strVal.replace(/"/g, '""')}"`;
+        }
+        return strVal;
+      }).join(",")
+    );
+    
+    const csvContent = [header, ...csvRows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${dataset.name.replace(/[^a-z0-9]/gi, "_")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado com sucesso!");
+  };
+
+  const handleUpdateStats = (configs: StatsConfig[]) => {
+    if (!selectedDataset) return;
+    updateDatasetMutation.mutate({
+      id: selectedDataset.id,
+      updates: { statsConfigs: configs },
+    });
   };
 
   const handleEditRow = (row: DatasetRow) => {
@@ -219,6 +263,7 @@ export default function Index() {
               onSelect={setSelectedDatasetId}
               onNew={() => setImportOpen(true)}
               onEdit={handleEditDataset}
+              onExport={handleExportCSV}
             />
           </aside>
 
@@ -273,6 +318,8 @@ export default function Index() {
                     rows={rows} 
                     columns={selectedDataset.columns} 
                     datasetName={selectedDataset.name}
+                    statsConfigs={selectedDataset.statsConfigs}
+                    onUpdateStats={handleUpdateStats}
                   />
                 )}
 

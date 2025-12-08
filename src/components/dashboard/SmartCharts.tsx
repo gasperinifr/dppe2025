@@ -3,6 +3,8 @@ import { DatasetRow, ChartConfig } from "@/types/dataset";
 import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   PieChart,
   Pie,
@@ -31,10 +33,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Info, Edit2, Save, X } from "lucide-react";
+import { Info, Edit2, Save, X, EyeOff } from "lucide-react";
 
 interface SmartChartsProps {
   rows: DatasetRow[];
@@ -91,6 +100,7 @@ export function SmartCharts({
     columnName: "",
   });
   const [categoryEdits, setCategoryEdits] = useState<CategoryEdit[]>([]);
+  const [hideNumericInTable, setHideNumericInTable] = useState<Record<number, boolean>>({});
 
   // Merge chartConfigs with suggestions
   const enhancedSuggestions = useMemo(() => {
@@ -106,7 +116,8 @@ export function SmartCharts({
             title: config.title,
             priority: 100,
             description: col ? `${col.uniqueValues} valores únicos` : 'Gráfico personalizado',
-          } as ChartSuggestion;
+            hideNumeric: config.hideNumeric,
+          } as ChartSuggestion & { hideNumeric?: boolean };
         });
     }
     
@@ -129,11 +140,11 @@ export function SmartCharts({
       // Apply overrides if they exist for this column
       const overrides = chartValueOverrides[suggestion.column] || {};
       
-      const maxItems = suggestion.type === 'pie' ? 8 : 10;
+      const maxItems = suggestion.type === 'pie' ? 8 : (suggestion.type === 'table' ? 50 : 10);
       
       const data: ChartData[] = Object.entries(counts)
         .map(([name, count], idx) => ({
-          name: name.length > 20 ? name.slice(0, 20) + "..." : name,
+          name: name.length > 25 ? name.slice(0, 25) + "..." : name,
           fullName: name,
           // Use override value if exists, otherwise use original count
           value: overrides[name] !== undefined ? overrides[name] : count,
@@ -160,7 +171,7 @@ export function SmartCharts({
     // Initialize category edits with all categories from original counts
     const edits: CategoryEdit[] = Object.entries(chartData.originalCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
+      .slice(0, 20)
       .map(([name, originalCount]) => ({
         name,
         // Use override if exists, otherwise original
@@ -201,6 +212,13 @@ export function SmartCharts({
     setCategoryEdits([]);
   };
 
+  const toggleHideNumeric = (chartIndex: number) => {
+    setHideNumericInTable(prev => ({
+      ...prev,
+      [chartIndex]: !prev[chartIndex],
+    }));
+  };
+
   if (chartsData.length === 0) {
     return (
       <Card className="border-border">
@@ -228,143 +246,204 @@ export function SmartCharts({
     return null;
   };
 
+  const renderTableChart = (data: ChartData[], chartIndex: number) => {
+    const hideNumbers = hideNumericInTable[chartIndex] || false;
+    
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-end gap-2">
+          <Label htmlFor={`hide-numbers-${chartIndex}`} className="text-xs text-muted-foreground">
+            Ocultar números
+          </Label>
+          <Switch
+            id={`hide-numbers-${chartIndex}`}
+            checked={hideNumbers}
+            onCheckedChange={() => toggleHideNumeric(chartIndex)}
+          />
+        </div>
+        <ScrollArea className="h-[250px]">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Categoria</TableHead>
+                {!hideNumbers && <TableHead className="text-right w-24">Frequência</TableHead>}
+                {!hideNumbers && <TableHead className="text-right w-20">%</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.map((item, idx) => (
+                <TableRow key={idx}>
+                  <TableCell className="font-medium" title={item.fullName}>
+                    {item.fullName}
+                  </TableCell>
+                  {!hideNumbers && (
+                    <TableCell className="text-right">{item.value}</TableCell>
+                  )}
+                  {!hideNumbers && (
+                    <TableCell className="text-right text-muted-foreground">
+                      {((item.value / rows.length) * 100).toFixed(1)}%
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    );
+  };
+
   const renderChart = (suggestion: ChartSuggestion, data: ChartData[], chartIndex: number) => {
+    if (suggestion.type === 'table') {
+      return renderTableChart(data, chartIndex);
+    }
+    
     switch (suggestion.type) {
       case 'pie':
         return (
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={90}
-              paddingAngle={2}
-              dataKey="value"
-            >
-              {data.map((_, idx) => (
-                <Cell
-                  key={`cell-${idx}`}
-                  fill={COLORS[idx % COLORS.length]}
-                  className="transition-opacity hover:opacity-80"
-                />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip />} />
-            <Legend
-              formatter={(value) => (
-                <span className="text-xs text-foreground">{value}</span>
-              )}
-            />
-          </PieChart>
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={90}
+                paddingAngle={2}
+                dataKey="value"
+              >
+                {data.map((_, idx) => (
+                  <Cell
+                    key={`cell-${idx}`}
+                    fill={COLORS[idx % COLORS.length]}
+                    className="transition-opacity hover:opacity-80"
+                  />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                formatter={(value) => (
+                  <span className="text-xs text-foreground">{value}</span>
+                )}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         );
       
       case 'horizontal-bar':
         return (
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ left: 10, right: 20 }}
-          >
-            <XAxis type="number" tick={{ fontSize: 11 }} />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={100}
-              tick={{ fontSize: 10 }}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar
-              dataKey="value"
-              fill="hsl(142, 76%, 36%)"
-              radius={[0, 4, 4, 0]}
-              className="transition-opacity hover:opacity-80"
-            />
-          </BarChart>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart
+              data={data}
+              layout="vertical"
+              margin={{ left: 10, right: 20 }}
+            >
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={100}
+                tick={{ fontSize: 10 }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar
+                dataKey="value"
+                fill="hsl(142, 76%, 36%)"
+                radius={[0, 4, 4, 0]}
+                className="transition-opacity hover:opacity-80"
+              />
+            </BarChart>
+          </ResponsiveContainer>
         );
       
       case 'area':
         return (
-          <AreaChart 
-            data={data} 
-            margin={{ left: -10, right: 10 }}
-          >
-            <defs>
-              <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.8}/>
-                <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.1}/>
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 10 }}
-              interval={0}
-              angle={-45}
-              textAnchor="end"
-              height={60}
-            />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="hsl(142, 76%, 36%)"
-              strokeWidth={2}
-              fillOpacity={1}
-              fill="url(#colorValue)"
-            />
-          </AreaChart>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart 
+              data={data} 
+              margin={{ left: -10, right: 10 }}
+            >
+              <defs>
+                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="hsl(142, 76%, 36%)"
+                strokeWidth={2}
+                fillOpacity={1}
+                fill="url(#colorValue)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         );
 
       case 'line':
         return (
-          <LineChart 
-            data={data} 
-            margin={{ left: -10, right: 10 }}
-          >
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 10 }}
-              interval={0}
-              angle={-45}
-              textAnchor="end"
-              height={60}
-            />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="hsl(142, 76%, 36%)"
-              strokeWidth={2}
-              dot={{ fill: "hsl(142, 76%, 36%)", strokeWidth: 2 }}
-            />
-          </LineChart>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart 
+              data={data} 
+              margin={{ left: -10, right: 10 }}
+            >
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="hsl(142, 76%, 36%)"
+                strokeWidth={2}
+                dot={{ fill: "hsl(142, 76%, 36%)", strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         );
       
       default: // bar chart
         return (
-          <BarChart 
-            data={data} 
-            margin={{ left: -10, right: 10 }}
-          >
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 10 }}
-              interval={0}
-              angle={-45}
-              textAnchor="end"
-              height={60}
-            />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar
-              dataKey="value"
-              fill="hsl(142, 76%, 36%)"
-              radius={[4, 4, 0, 0]}
-              className="transition-opacity hover:opacity-80"
-            />
-          </BarChart>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart 
+              data={data} 
+              margin={{ left: -10, right: 10 }}
+            >
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar
+                dataKey="value"
+                fill="hsl(142, 76%, 36%)"
+                radius={[4, 4, 0, 0]}
+                className="transition-opacity hover:opacity-80"
+              />
+            </BarChart>
+          </ResponsiveContainer>
         );
     }
   };
@@ -412,9 +491,7 @@ export function SmartCharts({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                {renderChart(suggestion, data, index)}
-              </ResponsiveContainer>
+              {renderChart(suggestion, data, index)}
             </CardContent>
           </Card>
         ))}

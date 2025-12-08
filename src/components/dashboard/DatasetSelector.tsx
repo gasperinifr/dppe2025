@@ -1,6 +1,6 @@
 import { Dataset } from "@/types/dataset";
 import { Button } from "@/components/ui/button";
-import { Plus, Database, Settings, FileSpreadsheet } from "lucide-react";
+import { Plus, Database, Settings, FileSpreadsheet, Download } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +16,12 @@ interface DatasetSelectorProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onEdit?: (dataset: Dataset) => void;
+  onExport?: (dataset: Dataset) => void;
+}
+
+function truncateText(text: string, maxLength: number = 20): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + "...";
 }
 
 export function DatasetSelector({
@@ -24,6 +30,7 @@ export function DatasetSelector({
   onSelect,
   onNew,
   onEdit,
+  onExport,
 }: DatasetSelectorProps) {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -67,51 +74,81 @@ export function DatasetSelector({
             </div>
           ) : (
             datasets.map((dataset) => (
-              <div
-                key={dataset.id}
-                className={`p-3 rounded-lg cursor-pointer transition-all overflow-hidden ${
-                  selectedId === dataset.id
-                    ? "bg-primary/10 border-2 border-primary/40 shadow-sm"
-                    : "bg-muted/50 hover:bg-muted border-2 border-transparent"
-                }`}
-                onClick={() => onSelect(dataset.id)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <p className="font-medium text-sm text-foreground truncate" title={dataset.name}>
-                      {dataset.name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <Badge variant="secondary" className="text-xs shrink-0">
-                        {dataset.columns.length} campos
-                      </Badge>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {formatDate(dataset.created_at)}
-                      </span>
-                    </div>
-                    {dataset.description && (
-                      <p className="text-xs text-muted-foreground mt-1 truncate" title={dataset.description}>
-                        {dataset.description}
-                      </p>
-                    )}
-                  </div>
-                  
-                  {onEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(dataset);
-                      }}
-                      title="Configurações"
+              <TooltipProvider key={dataset.id}>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`p-3 rounded-lg cursor-pointer transition-all overflow-hidden ${
+                        selectedId === dataset.id
+                          ? "bg-primary/10 border-2 border-primary/40 shadow-sm"
+                          : "bg-muted/50 hover:bg-muted border-2 border-transparent"
+                      }`}
+                      onClick={() => onSelect(dataset.id)}
                     >
-                      <Settings className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <p className="font-medium text-sm text-foreground truncate">
+                            {truncateText(dataset.name, 20)}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <Badge variant="secondary" className="text-xs shrink-0">
+                              {dataset.columns.length} campos
+                            </Badge>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {formatDate(dataset.created_at)}
+                            </span>
+                          </div>
+                          {dataset.description && (
+                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                              {truncateText(dataset.description, 25)}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center gap-1 shrink-0">
+                          {onExport && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onExport(dataset);
+                              }}
+                              title="Exportar CSV"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {onEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit(dataset);
+                              }}
+                              title="Configurações"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-[300px]">
+                    <p className="font-medium">{dataset.name}</p>
+                    {dataset.description && (
+                      <p className="text-xs text-muted-foreground mt-1">{dataset.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {dataset.columns.length} campos • Criado em {formatDate(dataset.created_at)}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ))
           )}
         </div>

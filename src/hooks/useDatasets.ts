@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Dataset, DatasetRow, DatasetInsert, DatasetUpdate, ChartConfig } from "@/types/dataset";
+import { Dataset, DatasetRow, DatasetInsert, DatasetUpdate, ChartConfig, StatsConfig } from "@/types/dataset";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
 import { ColumnAnalysis } from "@/lib/csvAnalyzer";
@@ -10,9 +10,9 @@ function parseColumnsData(columns: Json): {
   columns: ColumnAnalysis[]; 
   chartConfigs?: ChartConfig[];
   chartValueOverrides?: Record<string, Record<string, number>>;
+  statsConfigs?: StatsConfig[];
 } {
   if (Array.isArray(columns)) {
-    // Check if it's the new format with chartConfigs
     const firstItem = columns[0];
     if (firstItem && typeof firstItem === 'object' && firstItem !== null) {
       const obj = firstItem as Record<string, unknown>;
@@ -21,10 +21,10 @@ function parseColumnsData(columns: Json): {
           columns: (obj.columns as ColumnAnalysis[]) || [],
           chartConfigs: obj.chartConfigs as ChartConfig[] | undefined,
           chartValueOverrides: obj.chartValueOverrides as Record<string, Record<string, number>> | undefined,
+          statsConfigs: obj.statsConfigs as StatsConfig[] | undefined,
         };
       }
     }
-    // Legacy format - just columns array
     return { columns: columns as unknown as ColumnAnalysis[] };
   }
   return { columns: [] };
@@ -32,7 +32,7 @@ function parseColumnsData(columns: Json): {
 
 // Helper to convert DB data to Dataset
 function toDataset(data: Record<string, unknown>): Dataset {
-  const { columns, chartConfigs, chartValueOverrides } = parseColumnsData(data.columns as Json);
+  const { columns, chartConfigs, chartValueOverrides, statsConfigs } = parseColumnsData(data.columns as Json);
   return {
     id: data.id as string,
     name: data.name as string,
@@ -40,6 +40,7 @@ function toDataset(data: Record<string, unknown>): Dataset {
     columns,
     chartConfigs,
     chartValueOverrides,
+    statsConfigs,
     created_at: data.created_at as string,
     updated_at: data.updated_at as string,
   };
@@ -144,6 +145,7 @@ export function useUpdateDataset() {
         columns: updates.columns ?? currentParsed.columns,
         chartConfigs: updates.chartConfigs ?? currentParsed.chartConfigs,
         chartValueOverrides: updates.chartValueOverrides ?? currentParsed.chartValueOverrides,
+        statsConfigs: updates.statsConfigs ?? currentParsed.statsConfigs,
       }];
       updateData.columns = columnsData as unknown as Json;
 
