@@ -58,6 +58,7 @@ const CHART_TYPES = [
   { value: 'horizontal-bar', label: 'Barras Horizontal', icon: BarChart3 },
   { value: 'area', label: 'Área', icon: TrendingUp },
   { value: 'line', label: 'Linha', icon: LineChart },
+  { value: 'table', label: 'Tabela', icon: BarChart3 },
 ];
 
 export function EditDatasetDialog({
