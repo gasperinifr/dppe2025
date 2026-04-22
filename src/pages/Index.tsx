@@ -89,30 +89,6 @@ export default function Index() {
     return suggestions.slice(0, 4);
   }, [selectedDataset]);
 
-  const handleImport = async (
-    name: string,
-    columns: ColumnAnalysis[],
-    rowsData: Record<string, unknown>[],
-    chartSuggestions: ChartSuggestion[]
-  ) => {
-    createDatasetMutation.mutate(
-      { name, columns },
-      {
-        onSuccess: (newDataset) => {
-          bulkInsertRowsMutation.mutate(
-            { datasetId: newDataset.id, rows: rowsData },
-            {
-              onSuccess: () => {
-                setSelectedDatasetId(newDataset.id);
-                setImportOpen(false);
-              },
-            }
-          );
-        },
-      }
-    );
-  };
-
   const handleDeleteDataset = (id: string) => {
     deleteDatasetMutation.mutate(id, {
       onSuccess: () => {
