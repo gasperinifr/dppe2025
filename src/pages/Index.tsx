@@ -1,11 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Header } from "@/components/dashboard/Header";
 import { DatasetSelector } from "@/components/dashboard/DatasetSelector";
 import { SmartStats } from "@/components/dashboard/SmartStats";
 import { SmartCharts } from "@/components/dashboard/SmartCharts";
 import { SmartDataTable } from "@/components/dashboard/SmartDataTable";
-import { ImportDatasetDialog } from "@/components/dashboard/ImportDatasetDialog";
 import { EditRowDialog } from "@/components/dashboard/EditRowDialog";
 import { EditDatasetDialog } from "@/components/dashboard/EditDatasetDialog";
 import { DeleteConfirmDialog } from "@/components/dashboard/DeleteConfirmDialog";
@@ -14,18 +12,17 @@ import { FileSpreadsheet, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useSidebarActions } from "@/contexts/SidebarActionsContext";
 import {
   useDatasets,
   useDatasetRows,
-  useCreateDataset,
   useDeleteDataset,
   useUpdateDataset,
-  useBulkInsertDatasetRows,
   useUpdateDatasetRow,
   useDeleteDatasetRow,
 } from "@/hooks/useDatasets";
 import { Dataset, DatasetRow, ChartConfig, StatsConfig } from "@/types/dataset";
-import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
+import { ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
   const navigate = useNavigate();
