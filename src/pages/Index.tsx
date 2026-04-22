@@ -22,7 +22,7 @@ import {
   useDeleteDatasetRow,
 } from "@/hooks/useDatasets";
 import { Dataset, DatasetRow, ChartConfig, StatsConfig } from "@/types/dataset";
-import { ChartSuggestion } from "@/lib/csvAnalyzer";
+import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -195,7 +195,6 @@ export default function Index() {
   };
 
   const isLoading = loadingDatasets || loadingRows;
-  const isImporting = createDatasetMutation.isPending || bulkInsertRowsMutation.isPending;
 
   // Show loading while checking auth
   if (authLoading) {
@@ -213,8 +212,6 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onLogout={handleSignOut} />
-
       <main className="w-full max-w-[1600px] mx-auto px-4 lg:px-8 py-8 space-y-8">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar - Dataset Selector */}
@@ -223,7 +220,7 @@ export default function Index() {
               datasets={datasets}
               selectedId={selectedDatasetId}
               onSelect={setSelectedDatasetId}
-              onNew={() => setImportOpen(true)}
+              onNew={openImport}
               onEdit={handleEditDataset}
               onExport={handleExportCSV}
             />
@@ -241,7 +238,7 @@ export default function Index() {
                   Importe um arquivo CSV para começar a visualizar e gerenciar seus dados.
                   O sistema analisa automaticamente a estrutura e gera dashboards personalizados.
                 </p>
-                <Button onClick={() => setImportOpen(true)}>
+                <Button onClick={openImport}>
                   Importar CSV
                 </Button>
               </div>
@@ -322,14 +319,6 @@ export default function Index() {
           </div>
         </div>
       </main>
-
-      {/* Import Dialog */}
-      <ImportDatasetDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImport={handleImport}
-        isLoading={isImporting}
-      />
 
       {/* Edit Dataset Dialog */}
       <EditDatasetDialog
