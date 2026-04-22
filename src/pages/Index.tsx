@@ -1,11 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Header } from "@/components/dashboard/Header";
 import { DatasetSelector } from "@/components/dashboard/DatasetSelector";
 import { SmartStats } from "@/components/dashboard/SmartStats";
 import { SmartCharts } from "@/components/dashboard/SmartCharts";
 import { SmartDataTable } from "@/components/dashboard/SmartDataTable";
-import { ImportDatasetDialog } from "@/components/dashboard/ImportDatasetDialog";
 import { EditRowDialog } from "@/components/dashboard/EditRowDialog";
 import { EditDatasetDialog } from "@/components/dashboard/EditDatasetDialog";
 import { DeleteConfirmDialog } from "@/components/dashboard/DeleteConfirmDialog";
@@ -14,13 +12,12 @@ import { FileSpreadsheet, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useSidebarActions } from "@/contexts/SidebarActionsContext";
 import {
   useDatasets,
   useDatasetRows,
-  useCreateDataset,
   useDeleteDataset,
   useUpdateDataset,
-  useBulkInsertDatasetRows,
   useUpdateDatasetRow,
   useDeleteDatasetRow,
 } from "@/hooks/useDatasets";
@@ -29,10 +26,10 @@ import { ColumnAnalysis, ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { openImport } = useSidebarActions();
   
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<DatasetRow | null>(null);
   const [editingDataset, setEditingDataset] = useState<Dataset | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
@@ -44,13 +41,11 @@ export default function Index() {
     }
   }, [user, authLoading, navigate]);
 
-  const { data: datasets = [], isLoading: loadingDatasets, refetch: refetchDatasets } = useDatasets();
-  const { data: rows = [], isLoading: loadingRows, refetch: refetchRows } = useDatasetRows(selectedDatasetId);
+  const { data: datasets = [], isLoading: loadingDatasets } = useDatasets();
+  const { data: rows = [], isLoading: loadingRows } = useDatasetRows(selectedDatasetId);
 
-  const createDatasetMutation = useCreateDataset();
   const deleteDatasetMutation = useDeleteDataset();
   const updateDatasetMutation = useUpdateDataset();
-  const bulkInsertRowsMutation = useBulkInsertDatasetRows();
   const updateRowMutation = useUpdateDatasetRow();
   const deleteRowMutation = useDeleteDatasetRow();
 
@@ -60,15 +55,6 @@ export default function Index() {
   if (!selectedDatasetId && datasets.length > 0 && !loadingDatasets) {
     setSelectedDatasetId(datasets[0].id);
   }
-
-  const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (error) {
-      toast.error('Erro ao sair');
-    } else {
-      navigate('/auth');
-    }
-  };
 
   // Generate chart suggestions from column analysis
   const chartSuggestions = useMemo((): ChartSuggestion[] => {
@@ -102,30 +88,6 @@ export default function Index() {
     
     return suggestions.slice(0, 4);
   }, [selectedDataset]);
-
-  const handleImport = async (
-    name: string,
-    columns: ColumnAnalysis[],
-    rowsData: Record<string, unknown>[],
-    chartSuggestions: ChartSuggestion[]
-  ) => {
-    createDatasetMutation.mutate(
-      { name, columns },
-      {
-        onSuccess: (newDataset) => {
-          bulkInsertRowsMutation.mutate(
-            { datasetId: newDataset.id, rows: rowsData },
-            {
-              onSuccess: () => {
-                setSelectedDatasetId(newDataset.id);
-                setImportOpen(false);
-              },
-            }
-          );
-        },
-      }
-    );
-  };
 
   const handleDeleteDataset = (id: string) => {
     deleteDatasetMutation.mutate(id, {
@@ -233,7 +195,6 @@ export default function Index() {
   };
 
   const isLoading = loadingDatasets || loadingRows;
-  const isImporting = createDatasetMutation.isPending || bulkInsertRowsMutation.isPending;
 
   // Show loading while checking auth
   if (authLoading) {
@@ -251,8 +212,6 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onLogout={handleSignOut} />
-
       <main className="w-full max-w-[1600px] mx-auto px-4 lg:px-8 py-8 space-y-8">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar - Dataset Selector */}
@@ -261,7 +220,7 @@ export default function Index() {
               datasets={datasets}
               selectedId={selectedDatasetId}
               onSelect={setSelectedDatasetId}
-              onNew={() => setImportOpen(true)}
+              onNew={openImport}
               onEdit={handleEditDataset}
               onExport={handleExportCSV}
             />
@@ -279,7 +238,7 @@ export default function Index() {
                   Importe um arquivo CSV para começar a visualizar e gerenciar seus dados.
                   O sistema analisa automaticamente a estrutura e gera dashboards personalizados.
                 </p>
-                <Button onClick={() => setImportOpen(true)}>
+                <Button onClick={openImport}>
                   Importar CSV
                 </Button>
               </div>
@@ -360,14 +319,6 @@ export default function Index() {
           </div>
         </div>
       </main>
-
-      {/* Import Dialog */}
-      <ImportDatasetDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImport={handleImport}
-        isLoading={isImporting}
-      />
 
       {/* Edit Dataset Dialog */}
       <EditDatasetDialog
