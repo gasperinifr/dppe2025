@@ -26,10 +26,10 @@ import { ChartSuggestion } from "@/lib/csvAnalyzer";
 
 export default function Index() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { openImport } = useSidebarActions();
   
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<DatasetRow | null>(null);
   const [editingDataset, setEditingDataset] = useState<Dataset | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
@@ -41,13 +41,11 @@ export default function Index() {
     }
   }, [user, authLoading, navigate]);
 
-  const { data: datasets = [], isLoading: loadingDatasets, refetch: refetchDatasets } = useDatasets();
-  const { data: rows = [], isLoading: loadingRows, refetch: refetchRows } = useDatasetRows(selectedDatasetId);
+  const { data: datasets = [], isLoading: loadingDatasets } = useDatasets();
+  const { data: rows = [], isLoading: loadingRows } = useDatasetRows(selectedDatasetId);
 
-  const createDatasetMutation = useCreateDataset();
   const deleteDatasetMutation = useDeleteDataset();
   const updateDatasetMutation = useUpdateDataset();
-  const bulkInsertRowsMutation = useBulkInsertDatasetRows();
   const updateRowMutation = useUpdateDatasetRow();
   const deleteRowMutation = useDeleteDatasetRow();
 
@@ -57,15 +55,6 @@ export default function Index() {
   if (!selectedDatasetId && datasets.length > 0 && !loadingDatasets) {
     setSelectedDatasetId(datasets[0].id);
   }
-
-  const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (error) {
-      toast.error('Erro ao sair');
-    } else {
-      navigate('/auth');
-    }
-  };
 
   // Generate chart suggestions from column analysis
   const chartSuggestions = useMemo((): ChartSuggestion[] => {
